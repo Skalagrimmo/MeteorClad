@@ -1,0 +1,14 @@
+# Зібрані білди та архіви LÖVE
+*.love
+*.exe
+*.zip
+build/
+dist/
+
+# Системні файли Windows та редакторів
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.bak
+*.tmp
