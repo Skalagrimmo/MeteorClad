@@ -4,7 +4,8 @@ local Game = {
     wave = 1,
     waveTimer = 0,
     score = 0,
-    choices = {}
+    choices = {},
+    choiceType = nil
 }
 
 local ctx
@@ -19,6 +20,7 @@ function Game:reset()
     self.waveTimer = 0
     self.score = 0
     self.choices = {}
+    self.choiceType = nil
 
     ctx.player:init()
     ctx.enemies:clear()
@@ -42,6 +44,15 @@ function Game:triggerLevelUp()
         end
     end
 
+    -- Veteran Mastery is unlocked only after all regular perks reach maxRank.
+    self.choiceType = "upgrade"
+    if #available == 0 then
+        self.choiceType = "mastery"
+        for _, mastery in ipairs(ctx.masteries) do
+            table.insert(available, mastery)
+        end
+    end
+
     self.choices = {}
     for i = 1, 3 do
         if #available > 0 then
@@ -53,6 +64,7 @@ function Game:triggerLevelUp()
 
     if #self.choices == 0 then
         self.state = "playing"
+        self.choiceType = nil
     end
 end
 
@@ -61,12 +73,17 @@ function Game:selectUpgrade(index)
     if choice then
         local Player = ctx.player
         choice.apply(Player)
-        Player.upgradeRanks[choice.id] = (Player.upgradeRanks[choice.id] or 0) + 1
+
+        local rankTable = choice.category == "mastery"
+            and Player.masteryRanks
+            or Player.upgradeRanks
+        rankTable[choice.id] = (rankTable[choice.id] or 0) + 1
 
         if Player.xp >= Player.xpToNext then
             self:triggerLevelUp()
         else
             self.state = "playing"
+            self.choiceType = nil
         end
     end
 end

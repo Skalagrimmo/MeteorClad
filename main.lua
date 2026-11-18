@@ -3,6 +3,7 @@
 local Config = require("config")
 local Utils = require("utils")
 local UpgradePool = require("upgrades")
+local MasteryPool = require("masteries")
 local Loot = require("loot")
 local Projectiles = require("projectiles")
 local Enemies = require("enemies")
@@ -14,6 +15,7 @@ local ctx = {
     config = Config,
     utils = Utils,
     upgrades = UpgradePool,
+    masteries = MasteryPool,
     loot = Loot,
     projectiles = Projectiles,
     enemies = Enemies,
