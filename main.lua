@@ -1,4 +1,4 @@
--- main.lua (Фінальна модульна точка входу - Stage C3)
+-- main.lua (Модульна точка входу - Stage C3)
 
 local Config = require("config")
 local Utils = require("utils")
@@ -29,9 +29,30 @@ Player:bind(ctx)
 Game:bind(ctx)
 UI:bind(ctx)
 
+local function loadInterfaceFont()
+    local fontPath = "fonts/NotoSans-Regular.ttf"
+
+    if not love.filesystem.getInfo(fontPath, "file") then
+        print("[MeteorClad] Ukrainian font is missing: " .. fontPath)
+        print("[MeteorClad] Download Noto Sans Regular and place it at the path above.")
+        return
+    end
+
+    local ok, fontOrError = pcall(love.graphics.newFont, fontPath, 12)
+    if not ok then
+        print("[MeteorClad] Could not load Noto Sans: " .. tostring(fontOrError))
+        print("[MeteorClad] Falling back to the LÖVE default font.")
+        return
+    end
+
+    love.graphics.setFont(fontOrError)
+    print("[MeteorClad] Loaded bundled Noto Sans UI font.")
+end
+
 function love.load()
     love.window.setTitle("MeteorClad - Hack'n'Slash RPG (Modular v0.6)")
     love.window.setMode(Config.arena.width, Config.arena.height)
+    loadInterfaceFont()
     math.randomseed(os.time())
     Game:reset()
 end
