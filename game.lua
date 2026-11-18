@@ -75,11 +75,24 @@ function Game:update(dt)
     if self.state ~= "playing" then return end
 
     ctx.player:update(dt)
-    ctx.enemies:update(dt)
-    ctx.projectiles:update(dt)
-    ctx.loot:update(dt)
+    if self.state ~= "playing" then return end
 
-    if #ctx.enemies.list == 0 and self.state == "playing" then
+    ctx.enemies:update(dt)
+    -- Enemy contact damage can end the run. Do not continue into projectile
+    -- or loot updates after Game Over.
+    if self.state ~= "playing" then return end
+
+    ctx.projectiles:update(dt)
+    -- A projectile can deal the lethal hit. In particular, do not let an XP
+    -- pickup later in this same frame replace the "gameover" state with
+    -- "levelup".
+    if self.state ~= "playing" then return end
+
+    ctx.loot:update(dt)
+    -- Loot collection can trigger a level-up screen and pause the run.
+    if self.state ~= "playing" then return end
+
+    if #ctx.enemies.list == 0 then
         self.waveTimer = self.waveTimer + dt
         if self.waveTimer >= ctx.config.arena.waveDelay then
             self.wave = self.wave + 1
