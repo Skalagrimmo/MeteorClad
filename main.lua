@@ -75,9 +75,14 @@ function love.keypressed(key)
     Game:keypressed(key)
 end
 
-function love.mousepressed(x, y, button)
+function love.mousepressed(x, y, button, istouch)
     if Benchmark.open then return end
+    if istouch and Benchmark:isMobileLauncherHit(x, y) then return end
     Game:mousepressed(x, y, button)
+end
+
+function love.touchpressed(id, x, y, dx, dy, pressure)
+    if Benchmark:touchpressed(x, y) then return end
 end
 
 local function drawProfiled(sectionName, system, profiling)
@@ -103,5 +108,16 @@ function love.draw()
 
     if profiling then
         Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
+    end
+
+    if Benchmark:isAndroid() and not Benchmark.open then
+        love.graphics.push("all")
+        love.graphics.setColor(0.12, 0.19, 0.29, 0.9)
+        love.graphics.rectangle("fill", Config.arena.width - 112, Config.arena.height - 54, 100, 44, 7, 7)
+        love.graphics.setColor(0.45, 0.72, 1, 1)
+        love.graphics.rectangle("line", Config.arena.width - 112, Config.arena.height - 54, 100, 44, 7, 7)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.printf("TEST", Config.arena.width - 108, Config.arena.height - 40, 92, "center")
+        love.graphics.pop()
     end
 end
