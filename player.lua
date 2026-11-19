@@ -24,6 +24,7 @@ function Player:init()
     self.pickupRadius = 100
     self.lifesteal = 0
     self.upgradeRanks = {}
+    self.masteryRanks = {}
 
     -- Основна атака (ЛКМ)
     self.attackCooldown = 0.35
