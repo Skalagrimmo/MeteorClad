@@ -265,7 +265,7 @@ function Benchmark:keypressed(key)
         return true
     end
 
-    if not self.running and not self.result then
+    if not self.running then
         local index = tonumber(key)
         if index and index >= 1 and index <= 6 then
             self:startScenario(index)
