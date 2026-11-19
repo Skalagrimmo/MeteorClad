@@ -406,8 +406,88 @@ function Benchmark:copyProfileLogPath()
         print("[MeteorClad Profile] Profile CSV path copied: " .. path)
     else
         self.profileLogStatus = "Could not copy profile path: " .. tostring(err)
-        print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+        print("[MeteorClad Profile] ERROR: " .. tostring(err))
     end
+end
+
+function Benchmark:isAndroid()
+    return love.system.getOS() == "Android"
+end
+
+function Benchmark:isMobileLauncherHit(x, y)
+    local w = ctx.config.arena.width
+    local h = ctx.config.arena.height
+    return x >= w - 112 and x <= w - 12
+        and y >= h - 54 and y <= h - 10
+end
+
+function Benchmark:openMobilePanel()
+    self.open = true
+    self.running = false
+    self.result = nil
+    return true
+end
+
+local function pointInRect(x, y, rx, ry, rw, rh)
+    return x >= rx and x <= rx + rw and y >= ry and y <= ry + rh
+end
+
+function Benchmark:touchpressed(x, y)
+    if not self:isAndroid() then return false end
+
+    if not self.open then
+        if self:isMobileLauncherHit(x, y) then
+            return self:openMobilePanel()
+        end
+        return false
+    end
+
+    local w = ctx.config.arena.width
+    local h = ctx.config.arena.height
+    local panelX, panelY = 20, 20
+    local panelW, panelH = w - 40, h - 40
+
+    if self.running then
+        if pointInRect(x, y, panelX + panelW - 150, panelY + panelH - 58, 130, 42) then
+            self:close()
+        end
+        return true
+    end
+
+    if self.result then
+        local buttonY = panelY + panelH - 105
+        local buttonW = (panelW - 48) / 3
+        if pointInRect(x, y, panelX + 12, buttonY, buttonW, 48) then
+            self:openSaveDirectory()
+        elseif pointInRect(x, y, panelX + 24 + buttonW, buttonY, buttonW, 48) then
+            self:copyLogPath()
+        elseif pointInRect(x, y, panelX + 36 + buttonW * 2, buttonY, buttonW, 48) then
+            self:copyProfileLogPath()
+        elseif pointInRect(x, y, panelX + 12, panelY + panelH - 50, panelW - 24, 36) then
+            self:close()
+        end
+        return true
+    end
+
+    local buttonW = (panelW - 48) / 2
+    local buttonH = 68
+    local startY = panelY + 92
+    local rowGap = 14
+    for index = 1, 6 do
+        local column = (index - 1) % 2
+        local row = math.floor((index - 1) / 2)
+        local bx = panelX + 12 + column * (buttonW + 24)
+        local by = startY + row * (buttonH + rowGap)
+        if pointInRect(x, y, bx, by, buttonW, buttonH) then
+            self:startScenario(index)
+            return true
+        end
+    end
+
+    if pointInRect(x, y, panelX + panelW - 112, panelY + 10, 100, 42) then
+        self:close()
+    end
+    return true
 end
 
 function Benchmark:enableUncappedSampling()
@@ -753,14 +833,91 @@ function Benchmark:draw()
     if not self.open then return end
 
     local w = ctx.config.arena.width
-    local panelX, panelY = 90, 92
-    local panelW, panelH = w - 180, 452
+    local h = ctx.config.arena.height
+    local mobile = self:isAndroid()
+    local panelX, panelY = mobile and 20 or 90, mobile and 20 or 92
+    local panelW, panelH = mobile and (w - 40) or (w - 180), mobile and (h - 40) or 452
 
     love.graphics.push("all")
     love.graphics.setColor(0.025, 0.035, 0.055, 0.96)
     love.graphics.rectangle("fill", panelX, panelY, panelW, panelH, 8, 8)
     love.graphics.setColor(0.35, 0.65, 0.95, 1)
     love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 8, 8)
+
+    if mobile then
+        local function drawButton(x, y, width, height, label)
+            love.graphics.setColor(0.12, 0.19, 0.29, 1)
+            love.graphics.rectangle("fill", x, y, width, height, 7, 7)
+            love.graphics.setColor(0.4, 0.68, 0.95, 1)
+            love.graphics.rectangle("line", x, y, width, height, 7, 7)
+            love.graphics.setColor(0.95, 0.97, 1, 1)
+            love.graphics.printf(label, x + 6, y + height * 0.36, width - 12, "center")
+        end
+
+        love.graphics.setColor(1, 0.86, 0.25, 1)
+        love.graphics.print("METEORCLAD — MOBILE BENCHMARK", panelX + 16, panelY + 16)
+
+        if self.running then
+            local remaining = math.max(0, self.warmup + self.sampleDuration - self.elapsed)
+            local phase = self.elapsed < self.warmup and "Warm-up" or "Sampling"
+            love.graphics.setColor(0.9, 0.93, 1, 1)
+            love.graphics.printf(
+                "Test: " .. self.scenario.name .. "\n"
+                .. string.format("%s | %.1f s remaining", phase, remaining) .. "\n"
+                .. "VSync during sampling: " .. tostring(self.vsyncMode),
+                panelX + 20, panelY + 100, panelW - 40, "center"
+            )
+            drawButton(panelX + panelW - 154, panelY + panelH - 58, 130, 42, "CANCEL")
+        elseif self.result then
+            local r = self.result
+            love.graphics.setColor(0.9, 0.93, 1, 1)
+            love.graphics.printf(
+                "Completed: " .. r.name .. "\n"
+                .. string.format("Average FPS: %.2f | %.3f ms/frame", r.averageFps, r.averageMs) .. "\n"
+                .. string.format("P95: %.3f ms | P99: %.3f ms | Max: %.3f ms", r.p95Ms, r.p99Ms, r.maxMs) .. "\n"
+                .. "VSync: " .. tostring(r.vsyncMode) .. " | Samples: " .. tostring(r.samples),
+                panelX + 18, panelY + 86, panelW - 36, "center"
+            )
+            for i = 1, math.min(2, #(self.profileRanked or {})) do
+                local entry = self.profileRanked[i]
+                love.graphics.printf(
+                    string.format("Hotspot %d: %s — avg %.3f ms / P95 %.3f ms",
+                        i, entry.name, entry.averageMs, entry.p95Ms),
+                    panelX + 12, panelY + 220 + (i - 1) * 32, panelW - 24, "center"
+                )
+            end
+            local buttonY = panelY + panelH - 105
+            local buttonW = (panelW - 48) / 3
+            drawButton(panelX + 12, buttonY, buttonW, 48, "FOLDER")
+            drawButton(panelX + 24 + buttonW, buttonY, buttonW, 48, "COPY F")
+            drawButton(panelX + 36 + buttonW * 2, buttonY, buttonW, 48, "COPY G")
+            drawButton(panelX + 12, panelY + panelH - 50, panelW - 24, 36, "BACK / CLOSE")
+        else
+            local buttonW = (panelW - 48) / 2
+            local buttonH = 68
+            local startY = panelY + 92
+            local rowGap = 14
+            local labels = {
+                "1 — 50 ENEMIES", "2 — 200 ENEMIES",
+                "3 — 500 ENEMIES", "4 — 1000 ENEMIES",
+                "5 — 250 PROJECTILES", "6 — 500 XP ORBS"
+            }
+            for index = 1, 6 do
+                local column = (index - 1) % 2
+                local row = math.floor((index - 1) / 2)
+                local bx = panelX + 12 + column * (buttonW + 24)
+                local by = startY + row * (buttonH + rowGap)
+                drawButton(bx, by, buttonW, buttonH, labels[index])
+            end
+            drawButton(panelX + panelW - 112, panelY + 10, 100, 42, "CLOSE")
+            love.graphics.setColor(0.86, 0.9, 0.98, 1)
+            love.graphics.printf("Tap a scenario. Each run: 2 s warm-up + 10 s sampling.",
+                panelX + 12, panelY + panelH - 38, panelW - 24, "center")
+        end
+
+        love.graphics.pop()
+        return
+    end
 
     love.graphics.setColor(1, 0.86, 0.25, 1)
     love.graphics.print("STAGE F/G — PERFORMANCE & SYSTEM PROFILE", panelX + 22, panelY + 18)
