@@ -38,6 +38,58 @@ local CSV_HEADER = table.concat({
     "projectiles_end", "xp_orbs_end", "manual_hardware_notes"
 }, ",")
 
+-- Stage G timings are diagnostic and intentionally kept in a separate file.
+-- draw_* timings measure CPU-side submission, not asynchronous GPU execution.
+local PROFILE_LOG_FILE = "stage_g_profile_results.csv"
+local PROFILE_SECTIONS = {
+    "frame_dt",
+    "game_update_total",
+    "player_update",
+    "enemies_update",
+    "projectiles_update",
+    "loot_update",
+    "draw_total_cpu",
+    "loot_draw_cpu",
+    "player_draw_cpu",
+    "enemies_draw_cpu",
+    "projectiles_draw_cpu",
+    "ui_draw_cpu",
+    "benchmark_draw_cpu"
+}
+
+-- Rank only leaf sections. Aggregate timings contain their children and must
+-- not be presented as independent hotspots.
+local PROFILE_RANKED_SECTIONS = {
+    "player_update",
+    "enemies_update",
+    "projectiles_update",
+    "loot_update",
+    "loot_draw_cpu",
+    "player_draw_cpu",
+    "enemies_draw_cpu",
+    "projectiles_draw_cpu",
+    "ui_draw_cpu",
+    "benchmark_draw_cpu"
+}
+
+local PROFILE_RANKED_LOOKUP = {}
+for _, section in ipairs(PROFILE_RANKED_SECTIONS) do
+    PROFILE_RANKED_LOOKUP[section] = true
+end
+
+local profileHeader = {
+    "time_local", "time_utc", "run_id", "scenario_id", "scenario_name",
+    "vsync_during_sampling", "love_version", "os", "processor_count",
+    "renderer_device", "profile_samples", "profile_method",
+    "manual_hardware_notes"
+}
+for _, section in ipairs(PROFILE_SECTIONS) do
+    table.insert(profileHeader, section .. "_avg_ms")
+    table.insert(profileHeader, section .. "_p95_ms")
+    table.insert(profileHeader, section .. "_max_ms")
+end
+local PROFILE_CSV_HEADER = table.concat(profileHeader, ",")
+
 local function csvEscape(value)
     local text = tostring(value == nil and "" or value)
     if text:find('[,"]') or text:find("[\r\n]") then
@@ -171,6 +223,153 @@ function Benchmark:bind(gameCtx)
     ctx = gameCtx
 end
 
+function Benchmark:isCollectingProfile()
+    return self.open == true
+        and self.running == true
+        and self.profileFrameEnabled == true
+end
+
+function Benchmark:recordProfile(sectionName, elapsedSeconds)
+    if not self:isCollectingProfile() or not self.profileSamples then return end
+
+    local samples = self.profileSamples[sectionName]
+    if not samples then return end
+
+    samples[#samples + 1] = math.max(0, elapsedSeconds or 0) * 1000
+end
+
+function Benchmark:resetProfileSamples()
+    self.profileSamples = {}
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        self.profileSamples[section] = {}
+    end
+    self.profileSummary = nil
+    self.profileRanked = {}
+    self.profileFrameEnabled = false
+end
+
+function Benchmark:buildProfileSummary()
+    local summary = {}
+    local ranked = {}
+
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        local samples = self.profileSamples and self.profileSamples[section] or {}
+        if #samples > 0 then
+            local sorted = {}
+            local total = 0
+
+            for i, value in ipairs(samples) do
+                sorted[i] = value
+                total = total + value
+            end
+            table.sort(sorted)
+
+            local stats = {
+                averageMs = total / #sorted,
+                p95Ms = percentile(sorted, 0.95),
+                maxMs = sorted[#sorted],
+                samples = #sorted
+            }
+            summary[section] = stats
+            if PROFILE_RANKED_LOOKUP[section] then
+                ranked[#ranked + 1] = {
+                    name = section,
+                    averageMs = stats.averageMs,
+                    p95Ms = stats.p95Ms,
+                    maxMs = stats.maxMs
+                }
+            end
+        end
+    end
+
+    table.sort(ranked, function(a, b)
+        return a.averageMs > b.averageMs
+    end)
+
+    return summary, ranked
+end
+
+function Benchmark:appendProfileLog(summary)
+    local saveDirectory = love.filesystem.getSaveDirectory()
+    local savePath = saveDirectory .. "/" .. PROFILE_LOG_FILE
+    local existingInfo = love.filesystem.getInfo(PROFILE_LOG_FILE, "file")
+    local shouldWriteHeader = not existingInfo or not existingInfo.size or existingInfo.size == 0
+
+    if shouldWriteHeader then
+        local headerOk, headerError = love.filesystem.write(
+            PROFILE_LOG_FILE, PROFILE_CSV_HEADER .. "\n"
+        )
+        if not headerOk then
+            self.profileLogStatus = "Profile CSV write failed: " .. tostring(headerError)
+            print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+            return false
+        end
+    end
+
+    local env = self.environment or {}
+    local values = {
+        self.runTimeLocal or os.date("%Y-%m-%d %H:%M:%S"),
+        self.runTimeUTC or os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        self.runId or "",
+        self.scenario and self.scenario.id or "",
+        self.scenario and self.scenario.name or "",
+        self.vsyncMode or "unknown",
+        env.loveVersion or "unknown",
+        env.os or "unknown",
+        env.processorCount or "",
+        env.rendererDevice or "",
+        summary.frame_dt and summary.frame_dt.samples or 0,
+        "love.timer.getTime; draw timings are CPU submission only, not GPU execution",
+        ""
+    }
+
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        local stats = summary[section] or {}
+        values[#values + 1] = string.format("%.6f", stats.averageMs or 0)
+        values[#values + 1] = string.format("%.6f", stats.p95Ms or 0)
+        values[#values + 1] = string.format("%.6f", stats.maxMs or 0)
+    end
+
+    local row = {}
+    for i, value in ipairs(values) do
+        row[i] = csvEscape(value)
+    end
+
+    local appendOk, appendError = love.filesystem.append(
+        PROFILE_LOG_FILE, table.concat(row, ",") .. "\n"
+    )
+    if not appendOk then
+        self.profileLogStatus = "Profile CSV append failed: " .. tostring(appendError)
+        print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+        return false
+    end
+
+    local fileInfo = love.filesystem.getInfo(PROFILE_LOG_FILE, "file")
+    if not fileInfo then
+        self.profileLogPath = savePath
+        self.profileLogStatus = "Profile CSV append reported success, but verification failed."
+        print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+        print("[MeteorClad Profile] SAVE_DIR=" .. saveDirectory)
+        return false
+    end
+
+    self.profileLogPath = savePath
+    self.profileLogSizeBytes = fileInfo.size or 0
+    self.profileLogStatus = string.format("Profile CSV verified: %d bytes", self.profileLogSizeBytes)
+
+    print("[MeteorClad Profile] PROFILE_CSV_LOG=" .. savePath)
+    print("[MeteorClad Profile] PROFILE_CSV_BYTES=" .. tostring(self.profileLogSizeBytes))
+    for _, entry in ipairs(self.profileRanked or {}) do
+        print(string.format(
+            "[MeteorClad Profile] %s avg=%.4fms p95=%.4fms max=%.4fms samples=%d",
+            entry.name, entry.averageMs, entry.p95Ms, entry.maxMs,
+            (summary[entry.name] and summary[entry.name].samples) or 0
+        ))
+    end
+    print("[MeteorClad Profile] draw_* values are CPU submission times; GPU execution is not measured.")
+    return true
+end
+
 function Benchmark:openSaveDirectory()
     local directory = love.filesystem.getSaveDirectory()
     local ok, opened = pcall(love.system.openURL, "file://" .. directory)
@@ -189,12 +388,151 @@ function Benchmark:copyLogPath()
     local ok, err = pcall(love.system.setClipboardText, path)
 
     if ok then
-        self.logStatus = "Full CSV path copied to clipboard."
+        self.logStatus = "Full Stage F CSV path copied to clipboard."
         print("[MeteorClad Benchmark] CSV path copied: " .. path)
     else
         self.logStatus = "Could not copy path: " .. tostring(err)
         print("[MeteorClad Benchmark] ERROR: " .. self.logStatus)
     end
+end
+
+function Benchmark:copyProfileLogPath()
+    local path = self.profileLogPath
+        or (love.filesystem.getSaveDirectory() .. "/" .. PROFILE_LOG_FILE)
+    local ok, err = pcall(love.system.setClipboardText, path)
+
+    if ok then
+        self.profileLogStatus = "Full Stage G profile CSV path copied to clipboard."
+        print("[MeteorClad Profile] Profile CSV path copied: " .. path)
+    else
+        self.profileLogStatus = "Could not copy profile path: " .. tostring(err)
+        print("[MeteorClad Profile] ERROR: " .. tostring(err))
+    end
+end
+
+function Benchmark:copyResultsSummary()
+    local r = self.result
+    if not r then return end
+
+    local env = self.environment or {}
+    local lines = {
+        "MeteorClad Stage G — Android profile",
+        "Scenario: " .. tostring(self.scenario and self.scenario.name or r.name),
+        "VSync: " .. tostring(r.vsyncMode),
+        string.format("Average FPS: %.3f", r.averageFps),
+        string.format("Average frame: %.6f ms", r.averageMs),
+        string.format("P50/P95/P99: %.6f / %.6f / %.6f ms", r.p50Ms, r.p95Ms, r.p99Ms),
+        string.format("Min/Max: %.6f / %.6f ms", r.minMs, r.maxMs),
+        "Samples: " .. tostring(r.samples),
+        "OS: " .. tostring(env.os),
+        "LÖVE: " .. tostring(env.loveVersion),
+        "CPU logical processors: " .. tostring(env.processorCount),
+        "Renderer: " .. tostring(env.rendererDevice),
+        "",
+        "Stage G sections (average / P95 / max ms):"
+    }
+
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        local stats = self.profileSummary and self.profileSummary[section]
+        if stats then
+            lines[#lines + 1] = string.format(
+                "%s: %.6f / %.6f / %.6f",
+                section, stats.averageMs, stats.p95Ms, stats.maxMs
+            )
+        end
+    end
+
+    local text = table.concat(lines, "\n")
+    local ok, err = pcall(love.system.setClipboardText, text)
+    if ok then
+        self.profileLogStatus = "Full Stage G report copied to clipboard."
+        print("[MeteorClad Profile] Full profile summary copied to clipboard.")
+    else
+        self.profileLogStatus = "Could not copy profile summary: " .. tostring(err)
+        print("[MeteorClad Profile] ERROR: " .. tostring(err))
+    end
+end
+
+function Benchmark:isAndroid()
+    return love.system.getOS() == "Android"
+end
+
+function Benchmark:isMobileLauncherHit(x, y)
+    local w = ctx.config.arena.width
+    local h = ctx.config.arena.height
+    return x >= w - 112 and x <= w - 12
+        and y >= h - 54 and y <= h - 10
+end
+
+function Benchmark:openMobilePanel()
+    self.open = true
+    self.running = false
+    self.result = nil
+    return true
+end
+
+local function pointInRect(x, y, rx, ry, rw, rh)
+    return x >= rx and x <= rx + rw and y >= ry and y <= ry + rh
+end
+
+function Benchmark:touchpressed(x, y)
+    if not self:isAndroid() then return false end
+
+    if not self.open then
+        if self:isMobileLauncherHit(x, y) then
+            return self:openMobilePanel()
+        end
+        return false
+    end
+
+    local w = ctx.config.arena.width
+    local h = ctx.config.arena.height
+    local panelX, panelY = 20, 20
+    local panelW, panelH = w - 40, h - 40
+
+    if self.running then
+        if pointInRect(x, y, panelX + panelW - 150, panelY + panelH - 58, 130, 42) then
+            self:close()
+        end
+        return true
+    end
+
+    if self.result then
+        local buttonY = panelY + panelH - 105
+        local buttonW = (panelW - 60) / 4
+        if pointInRect(x, y, panelX + 12, buttonY, buttonW, 48) then
+            self:openSaveDirectory()
+        elseif pointInRect(x, y, panelX + 24 + buttonW, buttonY, buttonW, 48) then
+            self:copyLogPath()
+        elseif pointInRect(x, y, panelX + 36 + buttonW * 2, buttonY, buttonW, 48) then
+            self:copyProfileLogPath()
+        elseif pointInRect(x, y, panelX + 48 + buttonW * 3, buttonY, buttonW, 48) then
+            self:copyResultsSummary()
+        elseif pointInRect(x, y, panelX + 12, panelY + panelH - 50, panelW - 24, 36) then
+            self:close()
+        end
+        return true
+    end
+
+    local buttonW = (panelW - 48) / 2
+    local buttonH = 68
+    local startY = panelY + 92
+    local rowGap = 14
+    for index = 1, 6 do
+        local column = (index - 1) % 2
+        local row = math.floor((index - 1) / 2)
+        local bx = panelX + 12 + column * (buttonW + 24)
+        local by = startY + row * (buttonH + rowGap)
+        if pointInRect(x, y, bx, by, buttonW, buttonH) then
+            self:startScenario(index)
+            return true
+        end
+    end
+
+    if pointInRect(x, y, panelX + panelW - 112, panelY + 10, 100, 42) then
+        self:close()
+    end
+    return true
 end
 
 function Benchmark:enableUncappedSampling()
@@ -381,6 +719,7 @@ function Benchmark:startScenario(index)
     self.scenario = scenario
     self.elapsed = 0
     self.samples = {}
+    self:resetProfileSamples()
     self.result = nil
     self.runId = os.date("%Y%m%d_%H%M%S")
     self.runTimeLocal = os.date("%Y-%m-%d %H:%M:%S")
@@ -430,9 +769,13 @@ function Benchmark:finishScenario()
         vsyncMode = self.vsyncMode or "unknown"
     }
 
+    self.profileSummary, self.profileRanked = self:buildProfileSummary()
+
     self.running = false
+    self.profileFrameEnabled = false
     self:restoreVsync()
     self:appendLog(self.result)
+    self:appendProfileLog(self.profileSummary or {})
 
     local r = self.result
     print(string.format(
@@ -440,10 +783,14 @@ function Benchmark:finishScenario()
         r.name, r.vsyncMode, r.enemies, r.projectiles, r.orbs, r.samples,
         r.averageFps, r.averageMs, r.p50Ms, r.p95Ms, r.p99Ms, r.minMs, r.maxMs, r.sampledSeconds
     ))
+    print("[MeteorClad Profile] Diagnostic profiling adds small timing overhead; compare profiles, not directly against the Stage F baseline.")
 end
 
 function Benchmark:update(dt)
     if not self.open or not self.running then return end
+
+    -- Enable profiling from the first frame that belongs to the sample window.
+    self.profileFrameEnabled = (self.elapsed + dt) >= self.warmup
 
     -- Keep the player alive without altering enemy/projectile update work.
     ctx.player.invulnTimer = 999999
@@ -452,11 +799,17 @@ function Benchmark:update(dt)
         self:topUpProjectiles()
     end
 
+    local updateStarted = self.profileFrameEnabled and love.timer.getTime() or nil
     ctx.game:update(dt)
+    if self.profileFrameEnabled then
+        self:recordProfile("game_update_total", love.timer.getTime() - updateStarted)
+    end
+
     self.elapsed = self.elapsed + dt
 
     if self.elapsed >= self.warmup then
         table.insert(self.samples, dt)
+        self:recordProfile("frame_dt", dt)
     end
 
     if self.elapsed >= self.warmup + self.sampleDuration then
@@ -472,9 +825,11 @@ function Benchmark:close()
 
     self.open = false
     self.running = false
+    self.profileFrameEnabled = false
     self.scenario = nil
     self.result = nil
     self.samples = {}
+    self.profileSamples = {}
 end
 
 function Benchmark:keypressed(key)
@@ -502,6 +857,9 @@ function Benchmark:keypressed(key)
         elseif key == "c" then
             self:copyLogPath()
             return true
+        elseif key == "p" then
+            self:copyProfileLogPath()
+            return true
         end
     end
 
@@ -520,8 +878,10 @@ function Benchmark:draw()
     if not self.open then return end
 
     local w = ctx.config.arena.width
-    local panelX, panelY = 90, 92
-    local panelW, panelH = w - 180, 452
+    local h = ctx.config.arena.height
+    local mobile = self:isAndroid()
+    local panelX, panelY = mobile and 20 or 90, mobile and 20 or 92
+    local panelW, panelH = mobile and (w - 40) or (w - 180), mobile and (h - 40) or 452
 
     love.graphics.push("all")
     love.graphics.setColor(0.025, 0.035, 0.055, 0.96)
@@ -529,8 +889,90 @@ function Benchmark:draw()
     love.graphics.setColor(0.35, 0.65, 0.95, 1)
     love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 8, 8)
 
+    if mobile then
+        local function drawButton(x, y, width, height, label)
+            love.graphics.setColor(0.12, 0.19, 0.29, 1)
+            love.graphics.rectangle("fill", x, y, width, height, 7, 7)
+            love.graphics.setColor(0.4, 0.68, 0.95, 1)
+            love.graphics.rectangle("line", x, y, width, height, 7, 7)
+            love.graphics.setColor(0.95, 0.97, 1, 1)
+            love.graphics.printf(label, x + 6, y + height * 0.36, width - 12, "center")
+        end
+
+        love.graphics.setColor(1, 0.86, 0.25, 1)
+        love.graphics.print("METEORCLAD — MOBILE BENCHMARK", panelX + 16, panelY + 16)
+
+        if self.running then
+            local remaining = math.max(0, self.warmup + self.sampleDuration - self.elapsed)
+            local phase = self.elapsed < self.warmup and "Warm-up" or "Sampling"
+            love.graphics.setColor(0.9, 0.93, 1, 1)
+            love.graphics.printf(
+                "Test: " .. self.scenario.name .. "\n"
+                .. string.format("%s | %.1f s remaining", phase, remaining) .. "\n"
+                .. "VSync during sampling: " .. tostring(self.vsyncMode),
+                panelX + 20, panelY + 100, panelW - 40, "center"
+            )
+            drawButton(panelX + panelW - 154, panelY + panelH - 58, 130, 42, "CANCEL")
+        elseif self.result then
+            local r = self.result
+            love.graphics.setColor(0.9, 0.93, 1, 1)
+            love.graphics.printf(
+                "Completed: " .. r.name .. "\n"
+                .. string.format("Average FPS: %.2f | %.3f ms/frame", r.averageFps, r.averageMs) .. "\n"
+                .. string.format("P95: %.3f ms | P99: %.3f ms | Max: %.3f ms", r.p95Ms, r.p99Ms, r.maxMs) .. "\n"
+                .. "VSync: " .. tostring(r.vsyncMode) .. " | Samples: " .. tostring(r.samples),
+                panelX + 18, panelY + 86, panelW - 36, "center"
+            )
+            for i = 1, math.min(4, #(self.profileRanked or {})) do
+                local entry = self.profileRanked[i]
+                love.graphics.printf(
+                    string.format("Hotspot %d: %s — avg %.3f ms / P95 %.3f ms",
+                        i, entry.name, entry.averageMs, entry.p95Ms),
+                    panelX + 12, panelY + 205 + (i - 1) * 30, panelW - 24, "center"
+                )
+            end
+            love.graphics.setColor(0.82, 0.88, 0.97, 1)
+            love.graphics.printf(
+                "Stage F: " .. tostring(self.logStatus or "pending")
+                .. " | Stage G: " .. tostring(self.profileLogStatus or "pending"),
+                panelX + 12, panelY + 345, panelW - 24, "center"
+            )
+            local buttonY = panelY + panelH - 105
+            local buttonW = (panelW - 60) / 4
+            drawButton(panelX + 12, buttonY, buttonW, 48, "FOLDER")
+            drawButton(panelX + 24 + buttonW, buttonY, buttonW, 48, "COPY F")
+            drawButton(panelX + 36 + buttonW * 2, buttonY, buttonW, 48, "COPY G")
+            drawButton(panelX + 48 + buttonW * 3, buttonY, buttonW, 48, "COPY DATA")
+            drawButton(panelX + 12, panelY + panelH - 50, panelW - 24, 36, "BACK / CLOSE")
+        else
+            local buttonW = (panelW - 48) / 2
+            local buttonH = 68
+            local startY = panelY + 92
+            local rowGap = 14
+            local labels = {
+                "1 — 50 ENEMIES", "2 — 200 ENEMIES",
+                "3 — 500 ENEMIES", "4 — 1000 ENEMIES",
+                "5 — 250 PROJECTILES", "6 — 500 XP ORBS"
+            }
+            for index = 1, 6 do
+                local column = (index - 1) % 2
+                local row = math.floor((index - 1) / 2)
+                local bx = panelX + 12 + column * (buttonW + 24)
+                local by = startY + row * (buttonH + rowGap)
+                drawButton(bx, by, buttonW, buttonH, labels[index])
+            end
+            drawButton(panelX + panelW - 112, panelY + 10, 100, 42, "CLOSE")
+            love.graphics.setColor(0.86, 0.9, 0.98, 1)
+            love.graphics.printf("Tap a scenario. Each run: 2 s warm-up + 10 s sampling.",
+                panelX + 12, panelY + panelH - 38, panelW - 24, "center")
+        end
+
+        love.graphics.pop()
+        return
+    end
+
     love.graphics.setColor(1, 0.86, 0.25, 1)
-    love.graphics.print("STAGE F — PERFORMANCE BENCHMARK", panelX + 22, panelY + 18)
+    love.graphics.print("STAGE F/G — PERFORMANCE & SYSTEM PROFILE", panelX + 22, panelY + 18)
     love.graphics.setColor(0.9, 0.93, 1, 1)
 
     local lines = {}
@@ -552,8 +994,16 @@ function Benchmark:draw()
         table.insert(lines, "VSync during sampling: " .. r.vsyncMode)
         table.insert(lines, string.format("Objects: %d enemies | %d projectiles | %d XP orbs",
             r.enemies, r.projectiles, r.orbs))
-        table.insert(lines, self.logStatus or "CSV log status: unknown")
-        table.insert(lines, "O = open the LÖVE save folder | C = copy exact CSV path")
+        table.insert(lines, self.logStatus or "Stage F CSV log status: unknown")
+        table.insert(lines, self.profileLogStatus or "Stage G profile CSV: awaiting test")
+        for i = 1, math.min(2, #(self.profileRanked or {})) do
+            local entry = self.profileRanked[i]
+            table.insert(lines, string.format(
+                "Profile hotspot %d: %s | avg %.3f ms | P95 %.3f ms",
+                i, entry.name, entry.averageMs, entry.p95Ms
+            ))
+        end
+        table.insert(lines, "O = open folder | C = copy Stage F CSV | P = copy Stage G profile CSV")
         table.insert(lines, "Press 1–6 to run another test, or Esc to reset and close.")
     else
         table.insert(lines, "[1] Mixed enemies — 50")
@@ -563,7 +1013,8 @@ function Benchmark:draw()
         table.insert(lines, "[5] Hostile projectiles — 250 active")
         table.insert(lines, "[6] XP orbs — 500")
         table.insert(lines, "Each test: 2 s warm-up + 10 s measured sampling.")
-        table.insert(lines, "Each result is appended to " .. LOG_FILE .. ".")
+        table.insert(lines, "Stage F metrics + Stage G update/draw section timings are recorded.")
+        table.insert(lines, "Stage G draw timings measure CPU submission, not GPU execution.")
         table.insert(lines, "Press a number to start, or Esc/F6 to return to the game.")
     end
 
