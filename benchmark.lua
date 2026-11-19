@@ -80,14 +80,8 @@ end
 function Benchmark:appendLog(result)
     local saveDirectory = love.filesystem.getSaveDirectory()
     local savePath = saveDirectory .. "/" .. LOG_FILE
-    local existingFile = io.open(savePath, "rb")
-    local shouldWriteHeader = true
-
-    if existingFile then
-        local existingSize = existingFile:seek("end") or 0
-        existingFile:close()
-        shouldWriteHeader = existingSize == 0
-    end
+    local existingInfo = love.filesystem.getInfo(LOG_FILE, "file")
+    local shouldWriteHeader = not existingInfo or not existingInfo.size or existingInfo.size == 0
 
     if shouldWriteHeader then
         local headerOk, headerError = love.filesystem.write(LOG_FILE, CSV_HEADER .. "\n")
