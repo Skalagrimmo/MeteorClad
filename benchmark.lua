@@ -145,10 +145,23 @@ function Benchmark:appendLog(result)
         return false
     end
 
+    local fileInfo = love.filesystem.getInfo(LOG_FILE, "file")
+    if not fileInfo then
+        self.logPath = savePath
+        self.logStatus = "CSV append reported success, but file verification failed."
+        print("[MeteorClad Benchmark] ERROR: " .. self.logStatus)
+        print("[MeteorClad Benchmark] SAVE_DIR=" .. saveDirectory)
+        return false
+    end
+
     self.logPath = savePath
-    self.logStatus = "CSV saved: " .. LOG_FILE
+    self.logDirectory = saveDirectory
+    self.logSizeBytes = fileInfo.size or 0
+    self.logStatus = string.format("CSV verified: %d bytes", self.logSizeBytes)
 
     print("[MeteorClad Benchmark] CSV_LOG=" .. self.logPath)
+    print("[MeteorClad Benchmark] SAVE_DIR=" .. saveDirectory)
+    print("[MeteorClad Benchmark] CSV_BYTES=" .. tostring(self.logSizeBytes))
     print(string.format(
         "[MeteorClad Benchmark] ENV love=%s os=%s cpu_threads=%s window=%dx%d fullscreen=%s renderer=%s vendor=%s device=%s",
         tostring(env.loveVersion), tostring(env.os), tostring(env.processorCount),
@@ -162,6 +175,32 @@ end
 
 function Benchmark:bind(gameCtx)
     ctx = gameCtx
+end
+
+function Benchmark:openSaveDirectory()
+    local directory = love.filesystem.getSaveDirectory()
+    local ok, opened = pcall(love.system.openURL, "file://" .. directory)
+
+    if ok and opened then
+        self.logStatus = "Opened LÖVE save directory."
+        print("[MeteorClad Benchmark] Opened save directory: " .. directory)
+    else
+        self.logStatus = "Could not open folder; use the copied path or console."
+        print("[MeteorClad Benchmark] ERROR: could not open save directory: " .. directory)
+    end
+end
+
+function Benchmark:copyLogPath()
+    local path = self.logPath or (love.filesystem.getSaveDirectory() .. "/" .. LOG_FILE)
+    local ok, err = pcall(love.system.setClipboardText, path)
+
+    if ok then
+        self.logStatus = "Full CSV path copied to clipboard."
+        print("[MeteorClad Benchmark] CSV path copied: " .. path)
+    else
+        self.logStatus = "Could not copy path: " .. tostring(err)
+        print("[MeteorClad Benchmark] ERROR: " .. self.logStatus)
+    end
 end
 
 function Benchmark:enableUncappedSampling()
@@ -462,6 +501,16 @@ function Benchmark:keypressed(key)
         return true
     end
 
+    if not self.running and self.result then
+        if key == "o" then
+            self:openSaveDirectory()
+            return true
+        elseif key == "c" then
+            self:copyLogPath()
+            return true
+        end
+    end
+
     if not self.running then
         local index = tonumber(key)
         if index and index >= 1 and index <= 6 then
@@ -510,7 +559,7 @@ function Benchmark:draw()
         table.insert(lines, string.format("Objects: %d enemies | %d projectiles | %d XP orbs",
             r.enemies, r.projectiles, r.orbs))
         table.insert(lines, self.logStatus or "CSV log status: unknown")
-        table.insert(lines, "CSV is in the LÖVE save directory; exact path is in the console.")
+        table.insert(lines, "O = open the LÖVE save folder | C = copy exact CSV path")
         table.insert(lines, "Press 1–6 to run another test, or Esc to reset and close.")
     else
         table.insert(lines, "[1] Mixed enemies — 50")
