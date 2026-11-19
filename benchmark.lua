@@ -30,7 +30,7 @@ end
 local LOG_FILE = "stage_f_benchmark_results.csv"
 local CSV_HEADER = table.concat({
     "time_local", "time_utc", "run_id", "scenario_id", "scenario_name",
-    "vsync_during_sampling", "love_version", "os", "window_width",
+    "vsync_during_sampling", "vsync_before_sampling", "metric_source", "love_version", "os", "window_width",
     "window_height", "fullscreen", "processor_count", "renderer_name",
     "renderer_version", "renderer_vendor", "renderer_device", "samples",
     "average_fps", "average_frame_ms", "p50_ms", "p95_ms", "p99_ms",
@@ -78,8 +78,18 @@ function Benchmark:getEnvironment()
 end
 
 function Benchmark:appendLog(result)
-    local info = love.filesystem.getInfo(LOG_FILE)
-    if not info or info.size == 0 then
+    local saveDirectory = love.filesystem.getSaveDirectory()
+    local savePath = saveDirectory .. "/" .. LOG_FILE
+    local existingFile = io.open(savePath, "rb")
+    local shouldWriteHeader = true
+
+    if existingFile then
+        local existingSize = existingFile:seek("end") or 0
+        existingFile:close()
+        shouldWriteHeader = existingSize == 0
+    end
+
+    if shouldWriteHeader then
         local headerOk, headerError = love.filesystem.write(LOG_FILE, CSV_HEADER .. "\n")
         if not headerOk then
             self.logStatus = "Log write failed: " .. tostring(headerError)
@@ -90,12 +100,14 @@ function Benchmark:appendLog(result)
 
     local env = self.environment or {}
     local values = {
-        os.date("%Y-%m-%d %H:%M:%S"),
-        os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        self.runTimeLocal or os.date("%Y-%m-%d %H:%M:%S"),
+        self.runTimeUTC or os.date("!%Y-%m-%dT%H:%M:%SZ"),
         self.runId or "",
         self.scenario and self.scenario.id or "",
         result.name,
         result.vsyncMode,
+        self.originalVsyncMode or "unknown",
+        "love.update dt",
         env.loveVersion,
         env.os,
         env.width,
@@ -133,8 +145,7 @@ function Benchmark:appendLog(result)
         return false
     end
 
-    local saveDirectory = love.filesystem.getSaveDirectory()
-    self.logPath = saveDirectory .. "/" .. LOG_FILE
+    self.logPath = savePath
     self.logStatus = "CSV saved: " .. LOG_FILE
 
     print("[MeteorClad Benchmark] CSV_LOG=" .. self.logPath)
@@ -155,6 +166,7 @@ end
 
 function Benchmark:enableUncappedSampling()
     self.originalVsync = nil
+    self.originalVsyncMode = "unknown"
     self.vsyncMode = "unchanged"
 
     if not love.window.getMode or not love.window.setVSync then
@@ -169,6 +181,7 @@ function Benchmark:enableUncappedSampling()
     end
 
     self.originalVsync = flags.vsync
+    self.originalVsyncMode = tostring(flags.vsync)
     local setOk, setError = pcall(love.window.setVSync, 0)
     if setOk then
         self.vsyncMode = "disabled"
@@ -338,6 +351,7 @@ function Benchmark:startScenario(index)
     self.result = nil
     self.runId = os.date("%Y%m%d_%H%M%S")
     self.runTimeLocal = os.date("%Y-%m-%d %H:%M:%S")
+    self.runTimeUTC = os.date("!%Y-%m-%dT%H:%M:%SZ")
     self.environment = self:getEnvironment()
     self.running = true
 
@@ -389,9 +403,9 @@ function Benchmark:finishScenario()
 
     local r = self.result
     print(string.format(
-        "[MeteorClad Benchmark] RESULT case=%s vsync=%s enemies=%d projectiles=%d orbs=%d samples=%d avg_fps=%.2f avg_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f",
+        "[MeteorClad Benchmark] RESULT case=%s vsync=%s enemies=%d projectiles=%d orbs=%d samples=%d avg_fps=%.2f avg_ms=%.3f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f min_ms=%.3f max_ms=%.3f sampled_s=%.3f",
         r.name, r.vsyncMode, r.enemies, r.projectiles, r.orbs, r.samples,
-        r.averageFps, r.averageMs, r.p95Ms, r.p99Ms, r.maxMs
+        r.averageFps, r.averageMs, r.p50Ms, r.p95Ms, r.p99Ms, r.minMs, r.maxMs, r.sampledSeconds
     ))
 end
 
@@ -490,8 +504,8 @@ function Benchmark:draw()
         local r = self.result
         table.insert(lines, "Completed: " .. r.name)
         table.insert(lines, string.format("Average FPS: %.2f | Average frame: %.3f ms", r.averageFps, r.averageMs))
-        table.insert(lines, string.format("P95 frame: %.3f ms | P99 frame: %.3f ms", r.p95Ms, r.p99Ms))
-        table.insert(lines, string.format("Worst frame: %.3f ms | Samples: %d", r.maxMs, r.samples))
+        table.insert(lines, string.format("P50: %.3f ms | P95: %.3f ms | P99: %.3f ms", r.p50Ms, r.p95Ms, r.p99Ms))
+        table.insert(lines, string.format("Min: %.3f ms | Max: %.3f ms | Samples: %d", r.minMs, r.maxMs, r.samples))
         table.insert(lines, "VSync during sampling: " .. r.vsyncMode)
         table.insert(lines, string.format("Objects: %d enemies | %d projectiles | %d XP orbs",
             r.enemies, r.projectiles, r.orbs))
