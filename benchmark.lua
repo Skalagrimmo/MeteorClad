@@ -31,6 +31,49 @@ function Benchmark:bind(gameCtx)
     ctx = gameCtx
 end
 
+function Benchmark:enableUncappedSampling()
+    self.originalVsync = nil
+    self.vsyncMode = "unchanged"
+
+    if not love.window.getMode or not love.window.setVSync then
+        print("[MeteorClad Benchmark] WARNING: cannot toggle VSync at runtime; results may be refresh-rate capped.")
+        return
+    end
+
+    local ok, _, _, flags = pcall(love.window.getMode)
+    if not ok or type(flags) ~= "table" or flags.vsync == nil then
+        print("[MeteorClad Benchmark] WARNING: could not read current VSync mode; leaving it unchanged.")
+        return
+    end
+
+    self.originalVsync = flags.vsync
+    local setOk, setError = pcall(love.window.setVSync, 0)
+    if setOk then
+        self.vsyncMode = "disabled"
+        print("[MeteorClad Benchmark] VSync disabled for sampling.")
+    else
+        self.originalVsync = nil
+        print("[MeteorClad Benchmark] WARNING: could not disable VSync: " .. tostring(setError))
+    end
+end
+
+function Benchmark:restoreVsync()
+    if self.originalVsync ~= nil and love.window.setVSync then
+        local restoreValue = self.originalVsync
+        if restoreValue == true then restoreValue = 1 end
+        if restoreValue == false then restoreValue = 0 end
+
+        local ok, restoreError = pcall(love.window.setVSync, restoreValue)
+        if not ok then
+            print("[MeteorClad Benchmark] WARNING: could not restore VSync: " .. tostring(restoreError))
+        else
+            print("[MeteorClad Benchmark] Original VSync mode restored.")
+        end
+    end
+
+    self.originalVsync = nil
+end
+
 function Benchmark:addInertEnemy()
     ctx.enemies:spawn("grunt", 24, 24, 1)
     local enemy = ctx.enemies.list[#ctx.enemies.list]
@@ -153,6 +196,7 @@ function Benchmark:startScenario(index)
     if not scenario then return end
 
     self:prepareWorld()
+    self:enableUncappedSampling()
     ctx.game.wave = 3
 
     if scenario.kind == "enemies" then
@@ -200,15 +244,17 @@ function Benchmark:finishScenario()
         averageMs = averageFrameTime * 1000,
         p95Ms = percentile(sorted, 0.95) * 1000,
         p99Ms = percentile(sorted, 0.99) * 1000,
-        maxMs = (#sorted > 0 and sorted[#sorted] or 0) * 1000
+        maxMs = (#sorted > 0 and sorted[#sorted] or 0) * 1000,
+        vsyncMode = self.vsyncMode or "unknown"
     }
 
     self.running = false
+    self:restoreVsync()
 
     local r = self.result
     print(string.format(
-        "[MeteorClad Benchmark] RESULT case=%s enemies=%d projectiles=%d orbs=%d samples=%d avg_fps=%.2f avg_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f",
-        r.name, r.enemies, r.projectiles, r.orbs, r.samples,
+        "[MeteorClad Benchmark] RESULT case=%s vsync=%s enemies=%d projectiles=%d orbs=%d samples=%d avg_fps=%.2f avg_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f",
+        r.name, r.vsyncMode, r.enemies, r.projectiles, r.orbs, r.samples,
         r.averageFps, r.averageMs, r.p95Ms, r.p99Ms, r.maxMs
     ))
 end
@@ -236,6 +282,7 @@ function Benchmark:update(dt)
 end
 
 function Benchmark:close()
+    self:restoreVsync()
     if self.running or self.result then
         ctx.game:reset()
     end
@@ -301,6 +348,7 @@ function Benchmark:draw()
         table.insert(lines, string.format("%s | %.1f s remaining | live FPS: %d",
             phase, remaining, love.timer.getFPS()))
         table.insert(lines, "Keep the window focused; do not move the player.")
+        table.insert(lines, "VSync during sampling: " .. (self.vsyncMode or "unknown"))
         table.insert(lines, "The result will appear here and in the LÖVE console.")
     elseif self.result then
         local r = self.result
@@ -308,6 +356,7 @@ function Benchmark:draw()
         table.insert(lines, string.format("Average FPS: %.2f | Average frame: %.3f ms", r.averageFps, r.averageMs))
         table.insert(lines, string.format("P95 frame: %.3f ms | P99 frame: %.3f ms", r.p95Ms, r.p99Ms))
         table.insert(lines, string.format("Worst frame: %.3f ms | Samples: %d", r.maxMs, r.samples))
+        table.insert(lines, "VSync during sampling: " .. r.vsyncMode)
         table.insert(lines, string.format("Objects: %d enemies | %d projectiles | %d XP orbs",
             r.enemies, r.projectiles, r.orbs))
         table.insert(lines, "Press 1–6 to run another test, or Esc to reset and close.")
