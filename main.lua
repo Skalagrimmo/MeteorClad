@@ -10,6 +10,7 @@ local Enemies = require("enemies")
 local Player = require("player")
 local Game = require("game")
 local UI = require("ui")
+local Benchmark = require("benchmark")
 
 local ctx = {
     config = Config,
@@ -21,7 +22,8 @@ local ctx = {
     enemies = Enemies,
     player = Player,
     game = Game,
-    ui = UI
+    ui = UI,
+    benchmark = Benchmark
 }
 
 Loot:bind(ctx)
@@ -30,6 +32,7 @@ Enemies:bind(ctx)
 Player:bind(ctx)
 Game:bind(ctx)
 UI:bind(ctx)
+Benchmark:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -60,14 +63,20 @@ function love.load()
 end
 
 function love.update(dt)
-    Game:update(dt)
+    if Benchmark.open then
+        Benchmark:update(dt)
+    else
+        Game:update(dt)
+    end
 end
 
 function love.keypressed(key)
+    if Benchmark:keypressed(key) then return end
     Game:keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
+    if Benchmark.open then return end
     Game:mousepressed(x, y, button)
 end
 
@@ -77,4 +86,5 @@ function love.draw()
     Enemies:draw()
     Projectiles:draw()
     UI:draw()
+    Benchmark:draw()
 end
