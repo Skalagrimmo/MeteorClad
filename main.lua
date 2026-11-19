@@ -76,6 +76,7 @@ function love.keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
+    if Benchmark.open then return end
     Game:mousepressed(x, y, button)
 end
 
