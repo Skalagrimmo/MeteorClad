@@ -57,6 +57,21 @@ local PROFILE_SECTIONS = {
     "benchmark_draw_cpu"
 }
 
+-- Rank only leaf sections. Aggregate timings contain their children and must
+-- not be presented as independent hotspots.
+local PROFILE_RANKED_SECTIONS = {
+    "player_update",
+    "enemies_update",
+    "projectiles_update",
+    "loot_update",
+    "loot_draw_cpu",
+    "player_draw_cpu",
+    "enemies_draw_cpu",
+    "projectiles_draw_cpu",
+    "ui_draw_cpu",
+    "benchmark_draw_cpu"
+}
+
 local profileHeader = {
     "time_local", "time_utc", "run_id", "scenario_id", "scenario_name",
     "vsync_during_sampling", "love_version", "os", "processor_count",
@@ -251,12 +266,16 @@ function Benchmark:buildProfileSummary()
                 samples = #sorted
             }
             summary[section] = stats
-            ranked[#ranked + 1] = {
-                name = section,
-                averageMs = stats.averageMs,
-                p95Ms = stats.p95Ms,
-                maxMs = stats.maxMs
-            }
+            if section ~= "frame_dt"
+                and section ~= "game_update_total"
+                and section ~= "draw_total_cpu" then
+                ranked[#ranked + 1] = {
+                    name = section,
+                    averageMs = stats.averageMs,
+                    p95Ms = stats.p95Ms,
+                    maxMs = stats.maxMs
+                }
+            end
         end
     end
 
