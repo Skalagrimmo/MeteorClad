@@ -72,6 +72,11 @@ local PROFILE_RANKED_SECTIONS = {
     "benchmark_draw_cpu"
 }
 
+local PROFILE_RANKED_LOOKUP = {}
+for _, section in ipairs(PROFILE_RANKED_SECTIONS) do
+    PROFILE_RANKED_LOOKUP[section] = true
+end
+
 local profileHeader = {
     "time_local", "time_utc", "run_id", "scenario_id", "scenario_name",
     "vsync_during_sampling", "love_version", "os", "processor_count",
@@ -266,9 +271,7 @@ function Benchmark:buildProfileSummary()
                 samples = #sorted
             }
             summary[section] = stats
-            if section ~= "frame_dt"
-                and section ~= "game_update_total"
-                and section ~= "draw_total_cpu" then
+            if PROFILE_RANKED_LOOKUP[section] then
                 ranked[#ranked + 1] = {
                     name = section,
                     averageMs = stats.averageMs,
