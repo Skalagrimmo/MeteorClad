@@ -80,11 +80,29 @@ function love.mousepressed(x, y, button)
     Game:mousepressed(x, y, button)
 end
 
+local function drawProfiled(sectionName, system)
+    local profiling = Benchmark:isCollectingProfile()
+    local startedAt = profiling and love.timer.getTime() or nil
+
+    system:draw()
+
+    if profiling then
+        Benchmark:recordProfile(sectionName, love.timer.getTime() - startedAt)
+    end
+end
+
 function love.draw()
-    Loot:draw()
-    Player:draw()
-    Enemies:draw()
-    Projectiles:draw()
-    UI:draw()
-    Benchmark:draw()
+    local profiling = Benchmark:isCollectingProfile()
+    local startedAt = profiling and love.timer.getTime() or nil
+
+    drawProfiled("loot_draw_cpu", Loot)
+    drawProfiled("player_draw_cpu", Player)
+    drawProfiled("enemies_draw_cpu", Enemies)
+    drawProfiled("projectiles_draw_cpu", Projectiles)
+    drawProfiled("ui_draw_cpu", UI)
+    drawProfiled("benchmark_draw_cpu", Benchmark)
+
+    if profiling then
+        Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
+    end
 end
