@@ -27,6 +27,128 @@ local function percentile(sortedValues, fraction)
     return sortedValues[index]
 end
 
+local LOG_FILE = "stage_f_benchmark_results.csv"
+local CSV_HEADER = table.concat({
+    "time_local", "time_utc", "run_id", "scenario_id", "scenario_name",
+    "vsync_during_sampling", "love_version", "os", "window_width",
+    "window_height", "fullscreen", "processor_count", "renderer_name",
+    "renderer_version", "renderer_vendor", "renderer_device", "samples",
+    "average_fps", "average_frame_ms", "p50_ms", "p95_ms", "p99_ms",
+    "min_frame_ms", "max_frame_ms", "sampled_seconds", "enemies_end",
+    "projectiles_end", "xp_orbs_end", "manual_hardware_notes"
+}, ",")
+
+local function csvEscape(value)
+    local text = tostring(value == nil and "" or value)
+    if text:find('[,"]') or text:find("[\r\n]") then
+        return '"' .. text:gsub('"', '""') .. '"'
+    end
+    return text
+end
+
+local function safeCall(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, a, b, c, d = pcall(fn, ...)
+    if not ok then return nil end
+    return a, b, c, d
+end
+
+function Benchmark:getEnvironment()
+    local width, height, flags = safeCall(love.window.getMode)
+    flags = type(flags) == "table" and flags or {}
+
+    local major, minor, revision = safeCall(love.getVersion)
+    local osName = safeCall(love.system.getOS)
+    local processorCount = safeCall(love.system.getProcessorCount)
+    local rendererName, rendererVersion, rendererVendor, rendererDevice =
+        safeCall(love.graphics.getRendererInfo)
+
+    return {
+        loveVersion = major and string.format("%d.%d.%d", major, minor or 0, revision or 0) or "unknown",
+        os = osName or "unknown",
+        width = width or 0,
+        height = height or 0,
+        fullscreen = flags.fullscreen == true,
+        processorCount = processorCount or "",
+        rendererName = rendererName or "",
+        rendererVersion = rendererVersion or "",
+        rendererVendor = rendererVendor or "",
+        rendererDevice = rendererDevice or ""
+    }
+end
+
+function Benchmark:appendLog(result)
+    local info = love.filesystem.getInfo(LOG_FILE)
+    if not info or info.size == 0 then
+        local headerOk, headerError = love.filesystem.write(LOG_FILE, CSV_HEADER .. "\n")
+        if not headerOk then
+            self.logStatus = "Log write failed: " .. tostring(headerError)
+            print("[MeteorClad Benchmark] ERROR: " .. self.logStatus)
+            return false
+        end
+    end
+
+    local env = self.environment or {}
+    local values = {
+        os.date("%Y-%m-%d %H:%M:%S"),
+        os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        self.runId or "",
+        self.scenario and self.scenario.id or "",
+        result.name,
+        result.vsyncMode,
+        env.loveVersion,
+        env.os,
+        env.width,
+        env.height,
+        env.fullscreen,
+        env.processorCount,
+        env.rendererName,
+        env.rendererVersion,
+        env.rendererVendor,
+        env.rendererDevice,
+        result.samples,
+        string.format("%.3f", result.averageFps),
+        string.format("%.6f", result.averageMs),
+        string.format("%.6f", result.p50Ms),
+        string.format("%.6f", result.p95Ms),
+        string.format("%.6f", result.p99Ms),
+        string.format("%.6f", result.minMs),
+        string.format("%.6f", result.maxMs),
+        string.format("%.3f", result.sampledSeconds),
+        result.enemies,
+        result.projectiles,
+        result.orbs,
+        ""
+    }
+
+    local row = {}
+    for i, value in ipairs(values) do
+        row[i] = csvEscape(value)
+    end
+
+    local appendOk, appendError = love.filesystem.append(LOG_FILE, table.concat(row, ",") .. "\n")
+    if not appendOk then
+        self.logStatus = "Log write failed: " .. tostring(appendError)
+        print("[MeteorClad Benchmark] ERROR: " .. self.logStatus)
+        return false
+    end
+
+    local saveDirectory = love.filesystem.getSaveDirectory()
+    self.logPath = saveDirectory .. "/" .. LOG_FILE
+    self.logStatus = "CSV saved: " .. LOG_FILE
+
+    print("[MeteorClad Benchmark] CSV_LOG=" .. self.logPath)
+    print(string.format(
+        "[MeteorClad Benchmark] ENV love=%s os=%s cpu_threads=%s window=%dx%d fullscreen=%s renderer=%s vendor=%s device=%s",
+        tostring(env.loveVersion), tostring(env.os), tostring(env.processorCount),
+        tonumber(env.width) or 0, tonumber(env.height) or 0,
+        tostring(env.fullscreen), tostring(env.rendererName),
+        tostring(env.rendererVendor), tostring(env.rendererDevice)
+    ))
+    print("[MeteorClad Benchmark] CSV row appended successfully.")
+    return true
+end
+
 function Benchmark:bind(gameCtx)
     ctx = gameCtx
 end
@@ -184,12 +306,12 @@ end
 
 function Benchmark:startScenario(index)
     local definitions = {
-        [1] = {name = "Mixed enemies — 50", kind = "enemies", count = 50},
-        [2] = {name = "Mixed enemies — 200", kind = "enemies", count = 200},
-        [3] = {name = "Mixed enemies — 500", kind = "enemies", count = 500},
-        [4] = {name = "Mixed enemies — 1000", kind = "enemies", count = 1000},
-        [5] = {name = "Hostile projectiles — 250 active", kind = "projectiles", count = 250},
-        [6] = {name = "XP orbs — 500", kind = "loot", count = 500}
+        [1] = {id = 1, name = "Mixed enemies — 50", kind = "enemies", count = 50},
+        [2] = {id = 2, name = "Mixed enemies — 200", kind = "enemies", count = 200},
+        [3] = {id = 3, name = "Mixed enemies — 500", kind = "enemies", count = 500},
+        [4] = {id = 4, name = "Mixed enemies — 1000", kind = "enemies", count = 1000},
+        [5] = {id = 5, name = "Hostile projectiles — 250 active", kind = "projectiles", count = 250},
+        [6] = {id = 6, name = "XP orbs — 500", kind = "loot", count = 500}
     }
 
     local scenario = definitions[index]
@@ -214,6 +336,9 @@ function Benchmark:startScenario(index)
     self.elapsed = 0
     self.samples = {}
     self.result = nil
+    self.runId = os.date("%Y%m%d_%H%M%S")
+    self.runTimeLocal = os.date("%Y-%m-%d %H:%M:%S")
+    self.environment = self:getEnvironment()
     self.running = true
 
     print("[MeteorClad Benchmark] Started: " .. scenario.name)
@@ -233,6 +358,13 @@ function Benchmark:finishScenario()
     local count = #sorted
     local averageFrameTime = count > 0 and (total / count) or 0
     local averageFps = averageFrameTime > 0 and (1 / averageFrameTime) or 0
+    local minFrameTime = count > 0 and sorted[1] or 0
+    local maxFrameTime = count > 0 and sorted[#sorted] or 0
+    local sampledSeconds = 0
+
+    for _, frameTime in ipairs(self.samples) do
+        sampledSeconds = sampledSeconds + frameTime
+    end
 
     self.result = {
         name = self.scenario.name,
@@ -242,14 +374,18 @@ function Benchmark:finishScenario()
         samples = count,
         averageFps = averageFps,
         averageMs = averageFrameTime * 1000,
+        p50Ms = percentile(sorted, 0.50) * 1000,
         p95Ms = percentile(sorted, 0.95) * 1000,
         p99Ms = percentile(sorted, 0.99) * 1000,
-        maxMs = (#sorted > 0 and sorted[#sorted] or 0) * 1000,
+        minMs = minFrameTime * 1000,
+        maxMs = maxFrameTime * 1000,
+        sampledSeconds = sampledSeconds,
         vsyncMode = self.vsyncMode or "unknown"
     }
 
     self.running = false
     self:restoreVsync()
+    self:appendLog(self.result)
 
     local r = self.result
     print(string.format(
@@ -328,7 +464,7 @@ function Benchmark:draw()
 
     local w = ctx.config.arena.width
     local panelX, panelY = 90, 92
-    local panelW, panelH = w - 180, 416
+    local panelW, panelH = w - 180, 452
 
     love.graphics.push("all")
     love.graphics.setColor(0.025, 0.035, 0.055, 0.96)
@@ -359,6 +495,8 @@ function Benchmark:draw()
         table.insert(lines, "VSync during sampling: " .. r.vsyncMode)
         table.insert(lines, string.format("Objects: %d enemies | %d projectiles | %d XP orbs",
             r.enemies, r.projectiles, r.orbs))
+        table.insert(lines, self.logStatus or "CSV log status: unknown")
+        table.insert(lines, "CSV is in the LÖVE save directory; exact path is in the console.")
         table.insert(lines, "Press 1–6 to run another test, or Esc to reset and close.")
     else
         table.insert(lines, "[1] Mixed enemies — 50")
@@ -368,6 +506,7 @@ function Benchmark:draw()
         table.insert(lines, "[5] Hostile projectiles — 250 active")
         table.insert(lines, "[6] XP orbs — 500")
         table.insert(lines, "Each test: 2 s warm-up + 10 s measured sampling.")
+        table.insert(lines, "Each result is appended to " .. LOG_FILE .. ".")
         table.insert(lines, "Press a number to start, or Esc/F6 to return to the game.")
     end
 
