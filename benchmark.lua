@@ -38,6 +38,38 @@ local CSV_HEADER = table.concat({
     "projectiles_end", "xp_orbs_end", "manual_hardware_notes"
 }, ",")
 
+-- Stage G timings are diagnostic and intentionally kept in a separate file.
+-- draw_* timings measure CPU-side submission, not asynchronous GPU execution.
+local PROFILE_LOG_FILE = "stage_g_profile_results.csv"
+local PROFILE_SECTIONS = {
+    "frame_dt",
+    "game_update_total",
+    "player_update",
+    "enemies_update",
+    "projectiles_update",
+    "loot_update",
+    "draw_total_cpu",
+    "loot_draw_cpu",
+    "player_draw_cpu",
+    "enemies_draw_cpu",
+    "projectiles_draw_cpu",
+    "ui_draw_cpu",
+    "benchmark_draw_cpu"
+}
+
+local profileHeader = {
+    "time_local", "time_utc", "run_id", "scenario_id", "scenario_name",
+    "vsync_during_sampling", "love_version", "os", "processor_count",
+    "renderer_device", "profile_samples", "profile_method",
+    "manual_hardware_notes"
+}
+for _, section in ipairs(PROFILE_SECTIONS) do
+    table.insert(profileHeader, section .. "_avg_ms")
+    table.insert(profileHeader, section .. "_p95_ms")
+    table.insert(profileHeader, section .. "_max_ms")
+end
+local PROFILE_CSV_HEADER = table.concat(profileHeader, ",")
+
 local function csvEscape(value)
     local text = tostring(value == nil and "" or value)
     if text:find('[,"]') or text:find("[\r\n]") then
@@ -171,6 +203,151 @@ function Benchmark:bind(gameCtx)
     ctx = gameCtx
 end
 
+function Benchmark:isCollectingProfile()
+    return self.open == true
+        and self.running == true
+        and self.profileFrameEnabled == true
+end
+
+function Benchmark:recordProfile(sectionName, elapsedSeconds)
+    if not self:isCollectingProfile() or not self.profileSamples then return end
+
+    local samples = self.profileSamples[sectionName]
+    if not samples then return end
+
+    samples[#samples + 1] = math.max(0, elapsedSeconds or 0) * 1000
+end
+
+function Benchmark:resetProfileSamples()
+    self.profileSamples = {}
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        self.profileSamples[section] = {}
+    end
+    self.profileSummary = nil
+    self.profileRanked = {}
+    self.profileFrameEnabled = false
+end
+
+function Benchmark:buildProfileSummary()
+    local summary = {}
+    local ranked = {}
+
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        local samples = self.profileSamples and self.profileSamples[section] or {}
+        if #samples > 0 then
+            local sorted = {}
+            local total = 0
+
+            for i, value in ipairs(samples) do
+                sorted[i] = value
+                total = total + value
+            end
+            table.sort(sorted)
+
+            local stats = {
+                averageMs = total / #sorted,
+                p95Ms = percentile(sorted, 0.95),
+                maxMs = sorted[#sorted],
+                samples = #sorted
+            }
+            summary[section] = stats
+            ranked[#ranked + 1] = {
+                name = section,
+                averageMs = stats.averageMs,
+                p95Ms = stats.p95Ms,
+                maxMs = stats.maxMs
+            }
+        end
+    end
+
+    table.sort(ranked, function(a, b)
+        return a.averageMs > b.averageMs
+    end)
+
+    return summary, ranked
+end
+
+function Benchmark:appendProfileLog(summary)
+    local saveDirectory = love.filesystem.getSaveDirectory()
+    local savePath = saveDirectory .. "/" .. PROFILE_LOG_FILE
+    local existingInfo = love.filesystem.getInfo(PROFILE_LOG_FILE, "file")
+    local shouldWriteHeader = not existingInfo or not existingInfo.size or existingInfo.size == 0
+
+    if shouldWriteHeader then
+        local headerOk, headerError = love.filesystem.write(
+            PROFILE_LOG_FILE, PROFILE_CSV_HEADER .. "\n"
+        )
+        if not headerOk then
+            self.profileLogStatus = "Profile CSV write failed: " .. tostring(headerError)
+            print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+            return false
+        end
+    end
+
+    local env = self.environment or {}
+    local values = {
+        self.runTimeLocal or os.date("%Y-%m-%d %H:%M:%S"),
+        self.runTimeUTC or os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        self.runId or "",
+        self.scenario and self.scenario.id or "",
+        self.scenario and self.scenario.name or "",
+        self.vsyncMode or "unknown",
+        env.loveVersion or "unknown",
+        env.os or "unknown",
+        env.processorCount or "",
+        env.rendererDevice or "",
+        summary.frame_dt and summary.frame_dt.samples or 0,
+        "love.timer.getTime; draw timings are CPU submission only, not GPU execution",
+        ""
+    }
+
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        local stats = summary[section] or {}
+        values[#values + 1] = string.format("%.6f", stats.averageMs or 0)
+        values[#values + 1] = string.format("%.6f", stats.p95Ms or 0)
+        values[#values + 1] = string.format("%.6f", stats.maxMs or 0)
+    end
+
+    local row = {}
+    for i, value in ipairs(values) do
+        row[i] = csvEscape(value)
+    end
+
+    local appendOk, appendError = love.filesystem.append(
+        PROFILE_LOG_FILE, table.concat(row, ",") .. "\n"
+    )
+    if not appendOk then
+        self.profileLogStatus = "Profile CSV append failed: " .. tostring(appendError)
+        print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+        return false
+    end
+
+    local fileInfo = love.filesystem.getInfo(PROFILE_LOG_FILE, "file")
+    if not fileInfo then
+        self.profileLogPath = savePath
+        self.profileLogStatus = "Profile CSV append reported success, but verification failed."
+        print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
+        print("[MeteorClad Profile] SAVE_DIR=" .. saveDirectory)
+        return false
+    end
+
+    self.profileLogPath = savePath
+    self.profileLogSizeBytes = fileInfo.size or 0
+    self.profileLogStatus = string.format("Profile CSV verified: %d bytes", self.profileLogSizeBytes)
+
+    print("[MeteorClad Profile] PROFILE_CSV_LOG=" .. savePath)
+    print("[MeteorClad Profile] PROFILE_CSV_BYTES=" .. tostring(self.profileLogSizeBytes))
+    for _, entry in ipairs(self.profileRanked or {}) do
+        print(string.format(
+            "[MeteorClad Profile] %s avg=%.4fms p95=%.4fms max=%.4fms samples=%d",
+            entry.name, entry.averageMs, entry.p95Ms, entry.maxMs,
+            (summary[entry.name] and summary[entry.name].samples) or 0
+        ))
+    end
+    print("[MeteorClad Profile] draw_* values are CPU submission times; GPU execution is not measured.")
+    return true
+end
+
 function Benchmark:openSaveDirectory()
     local directory = love.filesystem.getSaveDirectory()
     local ok, opened = pcall(love.system.openURL, "file://" .. directory)
@@ -189,11 +366,25 @@ function Benchmark:copyLogPath()
     local ok, err = pcall(love.system.setClipboardText, path)
 
     if ok then
-        self.logStatus = "Full CSV path copied to clipboard."
+        self.logStatus = "Full Stage F CSV path copied to clipboard."
         print("[MeteorClad Benchmark] CSV path copied: " .. path)
     else
         self.logStatus = "Could not copy path: " .. tostring(err)
         print("[MeteorClad Benchmark] ERROR: " .. self.logStatus)
+    end
+end
+
+function Benchmark:copyProfileLogPath()
+    local path = self.profileLogPath
+        or (love.filesystem.getSaveDirectory() .. "/" .. PROFILE_LOG_FILE)
+    local ok, err = pcall(love.system.setClipboardText, path)
+
+    if ok then
+        self.profileLogStatus = "Full Stage G profile CSV path copied to clipboard."
+        print("[MeteorClad Profile] Profile CSV path copied: " .. path)
+    else
+        self.profileLogStatus = "Could not copy profile path: " .. tostring(err)
+        print("[MeteorClad Profile] ERROR: " .. self.profileLogStatus)
     end
 end
 
@@ -381,6 +572,7 @@ function Benchmark:startScenario(index)
     self.scenario = scenario
     self.elapsed = 0
     self.samples = {}
+    self:resetProfileSamples()
     self.result = nil
     self.runId = os.date("%Y%m%d_%H%M%S")
     self.runTimeLocal = os.date("%Y-%m-%d %H:%M:%S")
@@ -430,9 +622,13 @@ function Benchmark:finishScenario()
         vsyncMode = self.vsyncMode or "unknown"
     }
 
+    self.profileSummary, self.profileRanked = self:buildProfileSummary()
+
     self.running = false
+    self.profileFrameEnabled = false
     self:restoreVsync()
     self:appendLog(self.result)
+    self:appendProfileLog(self.profileSummary or {})
 
     local r = self.result
     print(string.format(
@@ -440,10 +636,14 @@ function Benchmark:finishScenario()
         r.name, r.vsyncMode, r.enemies, r.projectiles, r.orbs, r.samples,
         r.averageFps, r.averageMs, r.p50Ms, r.p95Ms, r.p99Ms, r.minMs, r.maxMs, r.sampledSeconds
     ))
+    print("[MeteorClad Profile] Diagnostic profiling adds small timing overhead; compare profiles, not directly against the Stage F baseline.")
 end
 
 function Benchmark:update(dt)
     if not self.open or not self.running then return end
+
+    -- Enable profiling from the first frame that belongs to the sample window.
+    self.profileFrameEnabled = (self.elapsed + dt) >= self.warmup
 
     -- Keep the player alive without altering enemy/projectile update work.
     ctx.player.invulnTimer = 999999
@@ -452,11 +652,17 @@ function Benchmark:update(dt)
         self:topUpProjectiles()
     end
 
+    local updateStarted = self.profileFrameEnabled and love.timer.getTime() or nil
     ctx.game:update(dt)
+    if self.profileFrameEnabled then
+        self:recordProfile("game_update_total", love.timer.getTime() - updateStarted)
+    end
+
     self.elapsed = self.elapsed + dt
 
     if self.elapsed >= self.warmup then
         table.insert(self.samples, dt)
+        self:recordProfile("frame_dt", dt)
     end
 
     if self.elapsed >= self.warmup + self.sampleDuration then
@@ -472,9 +678,11 @@ function Benchmark:close()
 
     self.open = false
     self.running = false
+    self.profileFrameEnabled = false
     self.scenario = nil
     self.result = nil
     self.samples = {}
+    self.profileSamples = {}
 end
 
 function Benchmark:keypressed(key)
@@ -501,6 +709,9 @@ function Benchmark:keypressed(key)
             return true
         elseif key == "c" then
             self:copyLogPath()
+            return true
+        elseif key == "p" then
+            self:copyProfileLogPath()
             return true
         end
     end
@@ -530,7 +741,7 @@ function Benchmark:draw()
     love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 8, 8)
 
     love.graphics.setColor(1, 0.86, 0.25, 1)
-    love.graphics.print("STAGE F — PERFORMANCE BENCHMARK", panelX + 22, panelY + 18)
+    love.graphics.print("STAGE F/G — PERFORMANCE & SYSTEM PROFILE", panelX + 22, panelY + 18)
     love.graphics.setColor(0.9, 0.93, 1, 1)
 
     local lines = {}
@@ -552,8 +763,16 @@ function Benchmark:draw()
         table.insert(lines, "VSync during sampling: " .. r.vsyncMode)
         table.insert(lines, string.format("Objects: %d enemies | %d projectiles | %d XP orbs",
             r.enemies, r.projectiles, r.orbs))
-        table.insert(lines, self.logStatus or "CSV log status: unknown")
-        table.insert(lines, "O = open the LÖVE save folder | C = copy exact CSV path")
+        table.insert(lines, self.logStatus or "Stage F CSV log status: unknown")
+        table.insert(lines, self.profileLogStatus or "Stage G profile CSV: awaiting test")
+        for i = 1, math.min(2, #(self.profileRanked or {})) do
+            local entry = self.profileRanked[i]
+            table.insert(lines, string.format(
+                "Profile hotspot %d: %s | avg %.3f ms | P95 %.3f ms",
+                i, entry.name, entry.averageMs, entry.p95Ms
+            ))
+        end
+        table.insert(lines, "O = open folder | C = copy Stage F CSV | P = copy Stage G profile CSV")
         table.insert(lines, "Press 1–6 to run another test, or Esc to reset and close.")
     else
         table.insert(lines, "[1] Mixed enemies — 50")
@@ -563,7 +782,8 @@ function Benchmark:draw()
         table.insert(lines, "[5] Hostile projectiles — 250 active")
         table.insert(lines, "[6] XP orbs — 500")
         table.insert(lines, "Each test: 2 s warm-up + 10 s measured sampling.")
-        table.insert(lines, "Each result is appended to " .. LOG_FILE .. ".")
+        table.insert(lines, "Stage F metrics + Stage G update/draw section timings are recorded.")
+        table.insert(lines, "Stage G draw timings measure CPU submission, not GPU execution.")
         table.insert(lines, "Press a number to start, or Esc/F6 to return to the game.")
     end
 
