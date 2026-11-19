@@ -410,6 +410,49 @@ function Benchmark:copyProfileLogPath()
     end
 end
 
+function Benchmark:copyResultsSummary()
+    local r = self.result
+    if not r then return end
+
+    local env = self.environment or {}
+    local lines = {
+        "MeteorClad Stage G — Android profile",
+        "Scenario: " .. tostring(self.scenario and self.scenario.name or r.name),
+        "VSync: " .. tostring(r.vsyncMode),
+        string.format("Average FPS: %.3f", r.averageFps),
+        string.format("Average frame: %.6f ms", r.averageMs),
+        string.format("P50/P95/P99: %.6f / %.6f / %.6f ms", r.p50Ms, r.p95Ms, r.p99Ms),
+        string.format("Min/Max: %.6f / %.6f ms", r.minMs, r.maxMs),
+        "Samples: " .. tostring(r.samples),
+        "OS: " .. tostring(env.os),
+        "LÖVE: " .. tostring(env.loveVersion),
+        "CPU logical processors: " .. tostring(env.processorCount),
+        "Renderer: " .. tostring(env.rendererDevice),
+        "",
+        "Stage G sections (average / P95 / max ms):"
+    }
+
+    for _, section in ipairs(PROFILE_SECTIONS) do
+        local stats = self.profileSummary and self.profileSummary[section]
+        if stats then
+            lines[#lines + 1] = string.format(
+                "%s: %.6f / %.6f / %.6f",
+                section, stats.averageMs, stats.p95Ms, stats.maxMs
+            )
+        end
+    end
+
+    local text = table.concat(lines, "\n")
+    local ok, err = pcall(love.system.setClipboardText, text)
+    if ok then
+        self.profileLogStatus = "Full Stage G report copied to clipboard."
+        print("[MeteorClad Profile] Full profile summary copied to clipboard.")
+    else
+        self.profileLogStatus = "Could not copy profile summary: " .. tostring(err)
+        print("[MeteorClad Profile] ERROR: " .. tostring(err))
+    end
+end
+
 function Benchmark:isAndroid()
     return love.system.getOS() == "Android"
 end
@@ -456,13 +499,15 @@ function Benchmark:touchpressed(x, y)
 
     if self.result then
         local buttonY = panelY + panelH - 105
-        local buttonW = (panelW - 48) / 3
+        local buttonW = (panelW - 60) / 4
         if pointInRect(x, y, panelX + 12, buttonY, buttonW, 48) then
             self:openSaveDirectory()
         elseif pointInRect(x, y, panelX + 24 + buttonW, buttonY, buttonW, 48) then
             self:copyLogPath()
         elseif pointInRect(x, y, panelX + 36 + buttonW * 2, buttonY, buttonW, 48) then
             self:copyProfileLogPath()
+        elseif pointInRect(x, y, panelX + 48 + buttonW * 3, buttonY, buttonW, 48) then
+            self:copyResultsSummary()
         elseif pointInRect(x, y, panelX + 12, panelY + panelH - 50, panelW - 24, 36) then
             self:close()
         end
@@ -878,19 +923,26 @@ function Benchmark:draw()
                 .. "VSync: " .. tostring(r.vsyncMode) .. " | Samples: " .. tostring(r.samples),
                 panelX + 18, panelY + 86, panelW - 36, "center"
             )
-            for i = 1, math.min(2, #(self.profileRanked or {})) do
+            for i = 1, math.min(4, #(self.profileRanked or {})) do
                 local entry = self.profileRanked[i]
                 love.graphics.printf(
                     string.format("Hotspot %d: %s — avg %.3f ms / P95 %.3f ms",
                         i, entry.name, entry.averageMs, entry.p95Ms),
-                    panelX + 12, panelY + 220 + (i - 1) * 32, panelW - 24, "center"
+                    panelX + 12, panelY + 205 + (i - 1) * 30, panelW - 24, "center"
                 )
             end
+            love.graphics.setColor(0.82, 0.88, 0.97, 1)
+            love.graphics.printf(
+                "Stage F: " .. tostring(self.logStatus or "pending")
+                .. " | Stage G: " .. tostring(self.profileLogStatus or "pending"),
+                panelX + 12, panelY + 345, panelW - 24, "center"
+            )
             local buttonY = panelY + panelH - 105
-            local buttonW = (panelW - 48) / 3
+            local buttonW = (panelW - 60) / 4
             drawButton(panelX + 12, buttonY, buttonW, 48, "FOLDER")
             drawButton(panelX + 24 + buttonW, buttonY, buttonW, 48, "COPY F")
             drawButton(panelX + 36 + buttonW * 2, buttonY, buttonW, 48, "COPY G")
+            drawButton(panelX + 48 + buttonW * 3, buttonY, buttonW, 48, "COPY DATA")
             drawButton(panelX + 12, panelY + panelH - 50, panelW - 24, 36, "BACK / CLOSE")
         else
             local buttonW = (panelW - 48) / 2
