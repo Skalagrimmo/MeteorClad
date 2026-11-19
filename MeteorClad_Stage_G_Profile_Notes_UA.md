@@ -28,7 +28,9 @@ Stage G додає деталізацію до Stage F benchmark, щоб від�
 - **O** відкриває save directory.
 - **C** копіює шлях до Stage F CSV.
 - **P** копіює шлях до Stage G profile CSV; на екрані Android є кнопка **COPY DATA**, що кладе повний звіт усіх секцій у буфер обміну.
-- **Esc** очищає benchmark-сцену та закриває панель; на Android це робить сенсорна кнопка BACK / CLOSE.\n\nНа Android touch UI запускає benchmark, але не замінює клавіатурний рух гравця у звичайному режимі.
+- **Esc** очищає benchmark-сцену та закриває панель; на Android це робить сенсорна кнопка BACK / CLOSE.
+
+На Android touch UI запускає benchmark, але не замінює клавіатурний рух гравця у звичайному режимі.
 
 Обидва CSV append-only. Після завершення тестів копіюйте їх у benchmark-results/ для Git.
 
