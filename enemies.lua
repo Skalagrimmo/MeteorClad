@@ -132,14 +132,6 @@ function Enemies:update(dt)
                         movementSpeed = -e.speed * 0.7
                     end
                 end
-
-                e.shootTimer = e.shootTimer - dt
-                if e.shootTimer <= 0 then
-                    e.shootTimer = e.shootCooldown
-                    -- Compute a firing angle only when a projectile is emitted.
-                    local shootAngle = math.atan2(dy, dx)
-                    ctx.projectiles:spawn(e.x, e.y, shootAngle, 240, e.damage, "enemy")
-                end
             end
 
             if movementSpeed ~= 0 then
@@ -159,6 +151,18 @@ function Enemies:update(dt)
 
                 e.x = e.x + directionX * movementSpeed * dt
                 e.y = e.y + directionY * movementSpeed * dt
+            end
+
+            -- Preserve the original update order: move first, then spawn the
+            -- projectile at the shooter's updated position.
+            if e.behavior == "ranged" then
+                e.shootTimer = e.shootTimer - dt
+                if e.shootTimer <= 0 then
+                    e.shootTimer = e.shootCooldown
+                    -- dx/dy still describe the pre-movement aim direction.
+                    local shootAngle = math.atan2(dy, dx)
+                    ctx.projectiles:spawn(e.x, e.y, shootAngle, 240, e.damage, "enemy")
+                end
             end
 
             local contactDistance = Player.radius + e.radius
