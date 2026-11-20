@@ -390,6 +390,8 @@ function VectorLab:runRadialTest(vectorCount)
             caseName = "zero_length_fallback"
         elseif comparison.usedFallback then
             caseName = "near_zero_underflow_fallback"
+        elseif comparison.overflowedDistance then
+            caseName = "distance_squared_overflow"
         end
 
         vectors[#vectors + 1] = {
@@ -492,8 +494,9 @@ function VectorLab:runRadialTest(vectorCount)
         print("[MeteorClad VectorLab] SUMMARY_CSV=" .. self.radialSummaryPath)
         print("[MeteorClad VectorLab] DATA_CSV=" .. self.radialDataPath)
         print(string.format(
-            "[MeteorClad VectorLab] %s count=%d avg_angle=%.12g° p95=%.12g° max=%.12g° max_component=%.12g max_norm=%.12g fallbacks=%d",
-            testId, count, stats.averageAngleError, stats.p95AngleError,
+            "[MeteorClad VectorLab] %s count=%d valid_angles=%d invalid_directions=%d overflow=%d avg_angle=%.12g° p95=%.12g° max=%.12g° max_component=%.12g max_norm=%.12g fallbacks=%d",
+            testId, count, stats.validAngleCount, stats.invalidDirectionCount,
+            stats.overflowCount, stats.averageAngleError, stats.p95AngleError,
             stats.maxAngleError, stats.maxComponentError,
             stats.maxMagnitudeError, fallbackCount
         ))
@@ -610,7 +613,7 @@ function VectorLab:drawRadial()
     else
         love.graphics.setColor(0.78, 0.85, 0.94, 0.9)
         love.graphics.printf(
-            "Scales include zero, underflow-sized, tiny, normal and large inputs. Esc/F8 closes.",
+            "Scales span zero, underflow, normal, large and overflow boundaries. Esc/F8 closes.",
             20, h - 48, w - 40, "center"
         )
     end
