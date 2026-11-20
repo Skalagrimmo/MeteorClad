@@ -122,6 +122,11 @@ local function drawProfiled(sectionName, system, profiling)
 end
 
 function love.draw()
+    if VectorLab.radialOpen then
+        VectorLab:draw()
+        return
+    end
+
     local profiling = Benchmark:isCollectingProfile()
     local startedAt = profiling and love.timer.getTime() or nil
 
