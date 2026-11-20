@@ -3,6 +3,8 @@ local Loot = {
     orbs = {}
 }
 
+local CircleBatch = require("circle_batch")
+
 local ctx
 
 function Loot:bind(gameCtx)
@@ -49,10 +51,23 @@ function Loot:update(dt)
 end
 
 function Loot:draw()
-    for _, orb in ipairs(self.orbs) do
-        love.graphics.setColor(0.2, 1, 0.5)
-        love.graphics.circle("fill", orb.x, orb.y, orb.radius)
+    if #self.orbs == 0 then return end
+
+    if not self.drawBatch then
+        self.drawBatch = CircleBatch:newBatch(math.max(CircleBatch.initialCapacity, #self.orbs))
     end
+
+    CircleBatch:prepare(self.drawBatch)
+    self.drawBatch:setColor(0.2, 1, 0.5, 1)
+
+    local scaleFactor = 2 / CircleBatch.size
+    local origin = CircleBatch.origin
+    for _, orb in ipairs(self.orbs) do
+        local scale = orb.radius * scaleFactor
+        self.drawBatch:add(orb.x, orb.y, 0, scale, scale, origin, origin)
+    end
+
+    CircleBatch:draw(self.drawBatch)
 end
 
 return Loot
