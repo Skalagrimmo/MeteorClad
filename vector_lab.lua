@@ -215,7 +215,7 @@ function VectorLab:draw()
 
     local stats = self.stats
     local panelWidth = 430
-    local panelHeight = 76
+    local panelHeight = 94
     love.graphics.setColor(0.015, 0.025, 0.045, 0.88)
     love.graphics.rectangle("fill", 8, 8, panelWidth, panelHeight, 5, 5)
     love.graphics.setColor(0.25, 0.62, 0.82, 0.95)
@@ -233,9 +233,9 @@ function VectorLab:draw()
         stats.count, stats.averageAngleError, stats.maxAngleError
     ), 18, 55)
     love.graphics.print(string.format(
-        "max |norm−1|=%.3e  |  F6 turns VectorLab off before benchmarking",
+        "max |norm - 1|=%.3e  |  F6 = benchmark / auto-off",
         stats.maxMagnitudeError
-    ), 250, 55)
+    ), 18, 74)
 
     love.graphics.pop()
 end
