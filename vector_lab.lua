@@ -335,7 +335,8 @@ function VectorLab:runRadialTest(vectorCount)
 
     for index = 1, vectorCount do
         local fraction = (index - 0.5) / vectorCount
-        local angle = (index - 1) * (2 * math.pi / vectorCount)
+        -- Golden-angle sampling fills the disk without concentric-ring clumping.
+        local angle = (index - 1) * (math.pi * (3 - math.sqrt(5)))
         local visualRadius = displayRadius * math.sqrt(fraction)
         local scale = scales[((index - 1) % #scales) + 1]
 
