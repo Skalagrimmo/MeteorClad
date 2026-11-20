@@ -158,15 +158,15 @@ function Enemies:update(dt)
                     directionY = math.sin(fallbackAngle)
                 end
 
+                e.x = e.x + directionX * movementSpeed * dt
+                e.y = e.y + directionY * movementSpeed * dt
+
                 if vectorLabActive then
                     vectorLab:record(
                         e, e.x, e.y, dx, dy,
                         directionX, directionY, movementSpeed
                     )
                 end
-
-                e.x = e.x + directionX * movementSpeed * dt
-                e.y = e.y + directionY * movementSpeed * dt
             end
 
             -- Preserve the original update order: move first, then spawn the
