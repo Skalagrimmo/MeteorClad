@@ -1,4 +1,6 @@
 -- enemies.lua
+local CircleBatch = require("circle_batch")
+
 local Enemies = {
     list = {}
 }
@@ -148,6 +150,46 @@ end
 
 function Enemies:draw()
     local Utils = ctx.utils
+    local hasDamagedEnemy = false
+
+    -- Keep the original per-enemy painter order whenever HP bars are needed.
+    -- The fully healthy benchmark/gameplay case can safely batch body circles.
+    for _, e in ipairs(self.list) do
+        if e.hp < e.maxHp then
+            hasDamagedEnemy = true
+            break
+        end
+    end
+
+    if not hasDamagedEnemy and #self.list > 0 then
+        if not self.drawBatch then
+            self.drawBatch = CircleBatch:newBatch(
+                math.max(CircleBatch.initialCapacity, #self.list)
+            )
+        end
+
+        CircleBatch:prepare(self.drawBatch)
+
+        local scaleFactor = 2 / CircleBatch.size
+        local origin = CircleBatch.origin
+
+        for _, e in ipairs(self.list) do
+            if e.hitFlash > 0 then
+                self.drawBatch:setColor(1, 1, 1, 1)
+            else
+                self.drawBatch:setColor(e.color[1], e.color[2], e.color[3], 1)
+            end
+
+            local scale = e.radius * scaleFactor
+            self.drawBatch:add(e.x, e.y, 0, scale, scale, origin, origin)
+        end
+
+        CircleBatch:draw(self.drawBatch)
+        return
+    end
+
+    -- Fallback preserves the original body/HP-bar draw order for damaged
+    -- enemies, avoiding changes to how overlapping bars and bodies compose.
     for _, e in ipairs(self.list) do
         if e.hitFlash > 0 then
             love.graphics.setColor(1, 1, 1)
@@ -156,8 +198,7 @@ function Enemies:draw()
         end
         love.graphics.circle("fill", e.x, e.y, e.radius)
 
-        -- Full-health enemies do not need a visible HP bar. Avoid drawing
-        -- its background and foreground until the enemy has taken damage.
+        -- Full-health enemies do not need a visible HP bar.
         if e.hp < e.maxHp then
             local barW = e.radius * 2
             love.graphics.setColor(0, 0, 0)
