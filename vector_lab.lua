@@ -36,12 +36,12 @@ local SUMMARY_HEADER = table.concat({
     "safe_average_angle_error_deg", "safe_p95_angle_error_deg",
     "safe_max_angle_error_deg", "safe_average_component_error",
     "safe_max_component_error", "safe_average_magnitude_error",
-    "safe_max_magnitude_error", "min_input_magnitude", "max_input_magnitude"
+    "safe_max_magnitude_error", "min_input_scale", "max_input_scale"
 }, ",")
 
 local DATA_HEADER = table.concat({
     "time_local", "time_utc", "run_id", "test_id", "vector_index",
-    "vector_case", "dx", "dy", "input_magnitude", "distance_squared",
+    "vector_case", "dx", "dy", "input_scale", "distance_squared",
     "legacy_status", "legacy_direction_valid", "legacy_x", "legacy_y",
     "legacy_angle_error_deg", "legacy_component_error",
     "legacy_magnitude_error", "legacy_used_fallback",
