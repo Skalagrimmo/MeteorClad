@@ -359,8 +359,14 @@ function VectorLab:runRadialTest(vectorCount)
         end
 
         vectors[#vectors + 1] = {
+            index = index,
             x = x,
             y = y,
+            dx = dx,
+            dy = dy,
+            scale = scale,
+            caseName = caseName,
+            comparison = comparison,
             referenceX = comparison.referenceX,
             referenceY = comparison.referenceY,
             normalizedX = comparison.normalizedX,
@@ -401,29 +407,12 @@ function VectorLab:runRadialTest(vectorCount)
     }
 
     local dataRows = {}
-    for index = 1, vectorCount do
-        local fraction = (index - 0.5) / vectorCount
-        local angle = (index - 1) * (2 * math.pi / vectorCount)
-        local scale = scales[((index - 1) % #scales) + 1]
-        local dx, dy
-        if scale == 0 then
-            dx, dy = 0, 0
-        else
-            dx = -math.cos(angle) * scale
-            dy = -math.sin(angle) * scale
-        end
-
-        local comparison = compareVector(dx, dy)
-        local caseName = "radial"
-        if scale == 0 then
-            caseName = "zero_length_fallback"
-        elseif comparison.usedFallback then
-            caseName = "near_zero_underflow_fallback"
-        end
-
+    for index, vector in ipairs(vectors) do
+        local comparison = vector.comparison
         dataRows[#dataRows + 1] = csvRow({
-            timeLocal, timeUtc, runId, testId, index, caseName,
-            number(dx), number(dy), number(scale), number(comparison.distanceSquared),
+            timeLocal, timeUtc, runId, testId, index, vector.caseName,
+            number(vector.dx), number(vector.dy), number(vector.scale),
+            number(comparison.distanceSquared),
             number(comparison.referenceX), number(comparison.referenceY),
             number(comparison.normalizedX), number(comparison.normalizedY),
             number(comparison.angleError), number(comparison.componentError),
