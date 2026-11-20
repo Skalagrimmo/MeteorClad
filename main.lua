@@ -70,16 +70,23 @@ end
 function love.update(dt)
     if Benchmark.open then
         Benchmark:update(dt)
+    elseif VectorLab.radialOpen then
+        -- The controlled radial test is stationary; pause the game simulation.
+        return
     else
         Game:update(dt)
     end
 end
 
 function love.keypressed(key)
-    -- Disable vector diagnostics before a benchmark so its reference math
-    -- cannot contaminate Stage F/G measurements.
-    if key == "f6" and VectorLab.active then
-        VectorLab:setActive(false)
+    -- F6 always closes VectorLab modes before opening the benchmark panel.
+    if key == "f6" then
+        if VectorLab.radialOpen then
+            VectorLab:closeRadial()
+        end
+        if VectorLab.active then
+            VectorLab:setActive(false)
+        end
     end
 
     if Benchmark:keypressed(key) then return end
@@ -88,12 +95,13 @@ function love.keypressed(key)
 end
 
 function love.mousepressed(x, y, button, istouch)
-    if Benchmark.open then return end
+    if Benchmark.open or VectorLab.radialOpen then return end
     if istouch and Benchmark:isMobileLauncherHit(x, y) then return end
     Game:mousepressed(x, y, button)
 end
 
 function love.touchpressed(id, x, y, dx, dy, pressure)
+    if VectorLab.radialOpen then return end
     if Benchmark:touchpressed(x, y) then
         -- The Android TEST launcher can open F6 without a keyboard event.
         if Benchmark.open and VectorLab.active then
