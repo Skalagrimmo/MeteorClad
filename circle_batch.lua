@@ -58,13 +58,10 @@ function CircleBatch:newBatch(capacity)
     )
 end
 
-function CircleBatch:prepare(batch, requiredSprites)
+function CircleBatch:prepare(batch)
+    -- LÖVE 11.0+ SpriteBatches grow automatically when add() exceeds
+    -- their initial capacity. setBufferSize() was removed in LÖVE 11.0.
     batch:clear()
-
-    local capacity = batch:getBufferSize()
-    if requiredSprites > capacity then
-        batch:setBufferSize(math.max(requiredSprites, capacity * 2))
-    end
 end
 
 function CircleBatch:draw(batch)
