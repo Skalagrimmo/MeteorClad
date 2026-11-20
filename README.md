@@ -49,7 +49,7 @@ love .
 - `game.lua` — стани гри, хвилі, level-up та введення
 - `ui.lua` — HUD, картки покращень і Game Over
 - `benchmark.lua` — панель Stage F benchmark і Stage G system profiler (F6)
-- `vector_lab.lua` — необов'язковий діагностичний оверлей векторів руху ворогів (F7)
+- `vector_lab.lua` — необов'язкова діагностика руху й радіальне stress-поле (F7/F8)
 - `benchmark-results/` — місце для CSV-журналів, скопійованих із каталогу збережень LÖVE
 - `fonts/` — шрифт інтерфейсу та його ліцензія
 
