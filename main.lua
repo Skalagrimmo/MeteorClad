@@ -11,6 +11,7 @@ local Player = require("player")
 local Game = require("game")
 local UI = require("ui")
 local Benchmark = require("benchmark")
+local VectorLab = require("vector_lab")
 local CircleBatch = require("circle_batch")
 
 local ctx = {
@@ -24,7 +25,8 @@ local ctx = {
     player = Player,
     game = Game,
     ui = UI,
-    benchmark = Benchmark
+    benchmark = Benchmark,
+    vectorLab = VectorLab
 }
 
 Loot:bind(ctx)
@@ -34,6 +36,7 @@ Player:bind(ctx)
 Game:bind(ctx)
 UI:bind(ctx)
 Benchmark:bind(ctx)
+VectorLab:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -73,7 +76,14 @@ function love.update(dt)
 end
 
 function love.keypressed(key)
+    -- Disable vector diagnostics before a benchmark so its reference math
+    -- cannot contaminate Stage F/G measurements.
+    if key == "f6" and VectorLab.active then
+        VectorLab:setActive(false)
+    end
+
     if Benchmark:keypressed(key) then return end
+    if VectorLab:keypressed(key) then return end
     Game:keypressed(key)
 end
 
@@ -107,6 +117,7 @@ function love.draw()
     drawProfiled("projectiles_draw_cpu", Projectiles, profiling)
     drawProfiled("ui_draw_cpu", UI, profiling)
     drawProfiled("benchmark_draw_cpu", Benchmark, profiling)
+    VectorLab:draw()
 
     if profiling then
         Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
