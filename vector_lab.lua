@@ -20,25 +20,35 @@ local VectorLab = {
     }
 }
 
--- v2 uses a new schema so previous CSV logs remain intact.
-local SUMMARY_LOG = "vector_lab_summary_v2.csv"
-local DATA_LOG = "vector_lab_vectors_v2.csv"
+-- v3 compares the original PR #8 normalization against a scale-safe candidate.
+-- Separate files preserve all v1/v2 measurements unchanged.
+local SUMMARY_LOG = "vector_lab_summary_v3.csv"
+local DATA_LOG = "vector_lab_vectors_v3.csv"
 
 local SUMMARY_HEADER = table.concat({
     "time_local", "time_utc", "run_id", "test_id", "vector_count",
-    "valid_angle_vectors", "invalid_direction_vectors", "overflow_vectors",
-    "average_angle_error_deg", "p95_angle_error_deg", "max_angle_error_deg",
-    "average_component_error", "max_component_error",
-    "average_magnitude_error", "max_magnitude_error",
-    "fallback_vectors", "min_input_magnitude", "max_input_magnitude"
+    "legacy_valid_vectors", "legacy_invalid_vectors", "legacy_overflow_vectors",
+    "legacy_fallback_vectors", "legacy_average_angle_error_deg",
+    "legacy_p95_angle_error_deg", "legacy_max_angle_error_deg",
+    "legacy_average_component_error", "legacy_max_component_error",
+    "legacy_average_magnitude_error", "legacy_max_magnitude_error",
+    "safe_valid_vectors", "safe_invalid_vectors", "safe_fallback_vectors",
+    "safe_average_angle_error_deg", "safe_p95_angle_error_deg",
+    "safe_max_angle_error_deg", "safe_average_component_error",
+    "safe_max_component_error", "safe_average_magnitude_error",
+    "safe_max_magnitude_error", "min_input_magnitude", "max_input_magnitude"
 }, ",")
 
 local DATA_HEADER = table.concat({
     "time_local", "time_utc", "run_id", "test_id", "vector_index",
     "vector_case", "dx", "dy", "input_magnitude", "distance_squared",
-    "normalization_status", "direction_valid",
-    "reference_x", "reference_y", "normalized_x", "normalized_y",
-    "angle_error_deg", "component_error", "magnitude_error", "used_fallback"
+    "legacy_status", "legacy_direction_valid", "legacy_x", "legacy_y",
+    "legacy_angle_error_deg", "legacy_component_error",
+    "legacy_magnitude_error", "legacy_used_fallback",
+    "safe_status", "safe_direction_valid", "safe_x", "safe_y",
+    "safe_angle_error_deg", "safe_component_error",
+    "safe_magnitude_error", "safe_used_fallback",
+    "reference_x", "reference_y"
 }, ",")
 
 local function clamp(value, minimum, maximum)
@@ -75,57 +85,109 @@ local function percentile(sortedValues, fraction)
     return sortedValues[index]
 end
 
+local function measureDirection(referenceX, referenceY, directionX, directionY)
+    local magnitude = math.sqrt(directionX * directionX + directionY * directionY)
+    local directionValid = magnitude > 0 and magnitude < math.huge
+        and magnitude == magnitude
+
+    local angleError
+    if directionValid then
+        local dot = clamp(
+            directionX * referenceX + directionY * referenceY,
+            -1, 1
+        )
+        local cross = directionX * referenceY - directionY * referenceX
+        angleError = math.deg(math.atan2(math.abs(cross), dot))
+    end
+
+    return {
+        x = directionX,
+        y = directionY,
+        directionValid = directionValid,
+        angleError = angleError,
+        componentError = math.max(
+            math.abs(directionX - referenceX),
+            math.abs(directionY - referenceY)
+        ),
+        magnitudeError = math.abs(magnitude - 1)
+    }
+end
+
 local function compareVector(dx, dy)
+    -- Trigonometric reference (the previous movement implementation).
     local referenceAngle = math.atan2(dy, dx)
     local referenceX = math.cos(referenceAngle)
     local referenceY = math.sin(referenceAngle)
 
+    -- Candidate A: current PR #8 algorithm, kept exactly for comparison.
     local distanceSquared = dx * dx + dy * dy
-    local normalizedX
-    local normalizedY
-    local usedFallback = distanceSquared <= 0
-    local overflowedDistance = distanceSquared == math.huge
-    local normalizationStatus
+    local legacyX
+    local legacyY
+    local legacyFallback = distanceSquared <= 0
+    local legacyOverflow = distanceSquared == math.huge
+    local legacyStatus
 
-    if overflowedDistance then
-        -- Reproduce PR #8: inverse sqrt(infinity) becomes zero, collapsing
-        -- the normalized vector. Do not disguise this as a zero-angle result.
-        normalizedX = 0
-        normalizedY = 0
-        normalizationStatus = "distance_squared_overflow"
-    elseif usedFallback then
-        -- Match MeteorClad's explicit zero/underflow-distance fallback.
-        normalizedX = math.cos(referenceAngle)
-        normalizedY = math.sin(referenceAngle)
-        normalizationStatus = (dx == 0 and dy == 0)
+    if legacyOverflow then
+        local inverseDistance = 1 / math.sqrt(distanceSquared)
+        legacyX = dx * inverseDistance
+        legacyY = dy * inverseDistance
+        legacyStatus = "distance_squared_overflow"
+    elseif legacyFallback then
+        legacyX = referenceX
+        legacyY = referenceY
+        legacyStatus = (dx == 0 and dy == 0)
             and "zero_length_fallback"
             or "underflow_fallback"
     else
         local inverseDistance = 1 / math.sqrt(distanceSquared)
-        normalizedX = dx * inverseDistance
-        normalizedY = dy * inverseDistance
-        normalizationStatus = "normalized"
+        legacyX = dx * inverseDistance
+        legacyY = dy * inverseDistance
+        legacyStatus = "normalized"
     end
 
-    local magnitude = math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY)
-    local directionValid = magnitude > 0 and magnitude < math.huge
-        and magnitude == magnitude
-    local angleError
-
-    if directionValid then
-        local dot = clamp(
-            normalizedX * referenceX + normalizedY * referenceY,
-            -1, 1
-        )
-        local cross = normalizedX * referenceY - normalizedY * referenceX
-        angleError = math.deg(math.atan2(math.abs(cross), dot))
-    end
-
-    local componentError = math.max(
-        math.abs(normalizedX - referenceX),
-        math.abs(normalizedY - referenceY)
+    local legacy = measureDirection(
+        referenceX, referenceY, legacyX, legacyY
     )
-    local magnitudeError = math.abs(magnitude - 1)
+    legacy.status = legacyStatus
+    legacy.usedFallback = legacyFallback
+    legacy.overflowedDistance = legacyOverflow
+
+    -- Candidate B: scale-safe normalization.
+    -- Divide by the largest absolute component first. Both scaled components
+    -- are within [-1, 1], so their squared sum cannot overflow; for any
+    -- representable nonzero input, the largest scaled component is +/-1,
+    -- preventing the squared length from underflowing to zero.
+    local componentScale = math.max(math.abs(dx), math.abs(dy))
+    local safeX
+    local safeY
+    local safeFallback = componentScale == 0
+    local safeStatus
+
+    if safeFallback then
+        -- A true zero vector has no mathematical direction; preserve the
+        -- platform's former atan2(0, 0) fallback for behavior compatibility.
+        safeX = referenceX
+        safeY = referenceY
+        safeStatus = "zero_length_fallback"
+    elseif componentScale == math.huge or componentScale ~= componentScale then
+        safeX = 0
+        safeY = 0
+        safeStatus = "non_finite_input"
+    else
+        local scaledX = dx / componentScale
+        local scaledY = dy / componentScale
+        local scaledLength = math.sqrt(scaledX * scaledX + scaledY * scaledY)
+        safeX = scaledX / scaledLength
+        safeY = scaledY / scaledLength
+        safeStatus = "scale_safe_normalized"
+    end
+
+    local safe = measureDirection(
+        referenceX, referenceY, safeX, safeY
+    )
+    safe.status = safeStatus
+    safe.usedFallback = safeFallback
+    safe.overflowedDistance = false
 
     return {
         dx = dx,
@@ -133,18 +195,11 @@ local function compareVector(dx, dy)
         distanceSquared = distanceSquared,
         referenceX = referenceX,
         referenceY = referenceY,
-        normalizedX = normalizedX,
-        normalizedY = normalizedY,
-        angleError = angleError,
-        componentError = componentError,
-        magnitudeError = magnitudeError,
-        usedFallback = usedFallback,
-        overflowedDistance = overflowedDistance,
-        directionValid = directionValid,
-        normalizationStatus = normalizationStatus
+        legacy = legacy,
+        safe = safe,
+        legacyOverflow = legacyOverflow
     }
 end
-
 local function appendCsv(path, header, rows)
     local info = love.filesystem.getInfo(path, "file")
     if not info or not info.size or info.size == 0 then
@@ -338,7 +393,7 @@ function VectorLab:runRadialTest(vectorCount)
     local scales = {
         0, 1e-200, 1e-12, 1e-9, 1e-6, 1e-3,
         0.1, 1, 16, 250, 1e6, 1e12, 1e100,
-        1e154, 1.34e154, 1.5e154, 1e155, 1e200
+        1e154, 1.34e154, 1.5e154, 1e155, 1e200, 1e308
     }
     local arena = self.ctx.config.arena
     local centerX = arena.width * 0.5
@@ -346,17 +401,20 @@ function VectorLab:runRadialTest(vectorCount)
     local displayRadius = math.min(arena.width, arena.height) * 0.39
 
     local vectors = {}
-    local angleErrors = {}
-    local angleErrorTotal = 0
-    local componentErrorTotal = 0
-    local magnitudeErrorTotal = 0
-    local maxAngleError = 0
-    local maxComponentError = 0
-    local maxMagnitudeError = 0
-    local fallbackCount = 0
-    local overflowCount = 0
-    local invalidDirectionCount = 0
-    local validAngleCount = 0
+    local legacyAngleErrors = {}
+    local safeAngleErrors = {}
+    local legacy = {
+        valid = 0, invalid = 0, overflow = 0, fallback = 0,
+        angleTotal = 0, maxAngle = 0,
+        componentTotal = 0, maxComponent = 0,
+        magnitudeTotal = 0, maxMagnitude = 0
+    }
+    local safe = {
+        valid = 0, invalid = 0, fallback = 0,
+        angleTotal = 0, maxAngle = 0,
+        componentTotal = 0, maxComponent = 0,
+        magnitudeTotal = 0, maxMagnitude = 0
+    }
     local minScale = math.huge
     local maxScale = 0
 
@@ -387,11 +445,11 @@ function VectorLab:runRadialTest(vectorCount)
         local y = centerY + math.sin(angle) * visualRadius
         local caseName = "radial"
         if scale == 0 then
-            caseName = "zero_length_fallback"
-        elseif comparison.usedFallback then
-            caseName = "near_zero_underflow_fallback"
-        elseif comparison.overflowedDistance then
-            caseName = "distance_squared_overflow"
+            caseName = "zero_length"
+        elseif comparison.legacy.status == "underflow_fallback" then
+            caseName = "underflow_boundary"
+        elseif comparison.legacyOverflow then
+            caseName = "overflow_boundary"
         end
 
         vectors[#vectors + 1] = {
@@ -402,49 +460,73 @@ function VectorLab:runRadialTest(vectorCount)
             dy = dy,
             scale = scale,
             caseName = caseName,
-            comparison = comparison,
             referenceX = comparison.referenceX,
             referenceY = comparison.referenceY,
-            normalizedX = comparison.normalizedX,
-            normalizedY = comparison.normalizedY,
-            angleError = comparison.angleError,
-            directionValid = comparison.directionValid,
-            normalizationStatus = comparison.normalizationStatus
+            legacy = comparison.legacy,
+            safe = comparison.safe
         }
 
-        if comparison.directionValid then
-            angleErrors[#angleErrors + 1] = comparison.angleError
-            angleErrorTotal = angleErrorTotal + comparison.angleError
-            maxAngleError = math.max(maxAngleError, comparison.angleError)
-            validAngleCount = validAngleCount + 1
+        local legacyResult = comparison.legacy
+        if legacyResult.directionValid then
+            legacy.valid = legacy.valid + 1
+            legacyAngleErrors[#legacyAngleErrors + 1] = legacyResult.angleError
+            legacy.angleTotal = legacy.angleTotal + legacyResult.angleError
+            legacy.maxAngle = math.max(legacy.maxAngle, legacyResult.angleError)
         else
-            invalidDirectionCount = invalidDirectionCount + 1
+            legacy.invalid = legacy.invalid + 1
         end
-        componentErrorTotal = componentErrorTotal + comparison.componentError
-        magnitudeErrorTotal = magnitudeErrorTotal + comparison.magnitudeError
-        maxComponentError = math.max(maxComponentError, comparison.componentError)
-        maxMagnitudeError = math.max(maxMagnitudeError, comparison.magnitudeError)
-        if comparison.usedFallback then fallbackCount = fallbackCount + 1 end
-        if comparison.overflowedDistance then overflowCount = overflowCount + 1 end
+        if legacyResult.overflowedDistance then legacy.overflow = legacy.overflow + 1 end
+        if legacyResult.usedFallback then legacy.fallback = legacy.fallback + 1 end
+        legacy.componentTotal = legacy.componentTotal + legacyResult.componentError
+        legacy.maxComponent = math.max(legacy.maxComponent, legacyResult.componentError)
+        legacy.magnitudeTotal = legacy.magnitudeTotal + legacyResult.magnitudeError
+        legacy.maxMagnitude = math.max(legacy.maxMagnitude, legacyResult.magnitudeError)
+
+        local safeResult = comparison.safe
+        if safeResult.directionValid then
+            safe.valid = safe.valid + 1
+            safeAngleErrors[#safeAngleErrors + 1] = safeResult.angleError
+            safe.angleTotal = safe.angleTotal + safeResult.angleError
+            safe.maxAngle = math.max(safe.maxAngle, safeResult.angleError)
+        else
+            safe.invalid = safe.invalid + 1
+        end
+        if safeResult.usedFallback then safe.fallback = safe.fallback + 1 end
+        safe.componentTotal = safe.componentTotal + safeResult.componentError
+        safe.maxComponent = math.max(safe.maxComponent, safeResult.componentError)
+        safe.magnitudeTotal = safe.magnitudeTotal + safeResult.magnitudeError
+        safe.maxMagnitude = math.max(safe.maxMagnitude, safeResult.magnitudeError)
+
         minScale = math.min(minScale, scale)
         maxScale = math.max(maxScale, scale)
     end
 
-    table.sort(angleErrors)
+    table.sort(legacyAngleErrors)
+    table.sort(safeAngleErrors)
     local count = #vectors
     local stats = {
         count = count,
-        validAngleCount = validAngleCount,
-        invalidDirectionCount = invalidDirectionCount,
-        overflowCount = overflowCount,
-        averageAngleError = angleErrorTotal / math.max(1, validAngleCount),
-        p95AngleError = percentile(angleErrors, 0.95),
-        maxAngleError = maxAngleError,
-        averageComponentError = componentErrorTotal / math.max(1, count),
-        maxComponentError = maxComponentError,
-        averageMagnitudeError = magnitudeErrorTotal / math.max(1, count),
-        maxMagnitudeError = maxMagnitudeError,
-        fallbackCount = fallbackCount,
+        legacy = {
+            valid = legacy.valid, invalid = legacy.invalid, overflow = legacy.overflow,
+            fallback = legacy.fallback,
+            averageAngle = legacy.angleTotal / math.max(1, legacy.valid),
+            p95Angle = percentile(legacyAngleErrors, 0.95),
+            maxAngle = legacy.maxAngle,
+            averageComponent = legacy.componentTotal / math.max(1, count),
+            maxComponent = legacy.maxComponent,
+            averageMagnitude = legacy.magnitudeTotal / math.max(1, count),
+            maxMagnitude = legacy.maxMagnitude
+        },
+        safe = {
+            valid = safe.valid, invalid = safe.invalid, fallback = safe.fallback,
+            averageAngle = safe.angleTotal / math.max(1, safe.valid),
+            p95Angle = percentile(safeAngleErrors, 0.95),
+            maxAngle = safe.maxAngle,
+            averageComponent = safe.componentTotal / math.max(1, count),
+            maxComponent = safe.maxComponent,
+            averageMagnitude = safe.magnitudeTotal / math.max(1, count),
+            maxMagnitude = safe.maxMagnitude
+        },
         minScale = minScale,
         maxScale = maxScale,
         runId = runId,
@@ -455,27 +537,36 @@ function VectorLab:runRadialTest(vectorCount)
 
     local dataRows = {}
     for index, vector in ipairs(vectors) do
-        local comparison = vector.comparison
+        local old = vector.legacy
+        local candidate = vector.safe
         dataRows[#dataRows + 1] = csvRow({
             timeLocal, timeUtc, runId, testId, index, vector.caseName,
             number(vector.dx), number(vector.dy), number(vector.scale),
-            number(comparison.distanceSquared), comparison.normalizationStatus,
-            tostring(comparison.directionValid),
-            number(comparison.referenceX), number(comparison.referenceY),
-            number(comparison.normalizedX), number(comparison.normalizedY),
-            number(comparison.angleError), number(comparison.componentError),
-            number(comparison.magnitudeError), tostring(comparison.usedFallback)
+            number((vector.dx * vector.dx) + (vector.dy * vector.dy)),
+            old.status, tostring(old.directionValid),
+            number(old.x), number(old.y), number(old.angleError),
+            number(old.componentError), number(old.magnitudeError),
+            tostring(old.usedFallback),
+            candidate.status, tostring(candidate.directionValid),
+            number(candidate.x), number(candidate.y), number(candidate.angleError),
+            number(candidate.componentError), number(candidate.magnitudeError),
+            tostring(candidate.usedFallback),
+            number(vector.referenceX), number(vector.referenceY)
         })
     end
 
     local summaryRow = csvRow({
         timeLocal, timeUtc, runId, testId, count,
-        stats.validAngleCount, stats.invalidDirectionCount, stats.overflowCount,
-        number(stats.averageAngleError), number(stats.p95AngleError),
-        number(stats.maxAngleError), number(stats.averageComponentError),
-        number(stats.maxComponentError), number(stats.averageMagnitudeError),
-        number(stats.maxMagnitudeError), fallbackCount,
-        number(minScale), number(maxScale)
+        stats.legacy.valid, stats.legacy.invalid, stats.legacy.overflow,
+        stats.legacy.fallback, number(stats.legacy.averageAngle),
+        number(stats.legacy.p95Angle), number(stats.legacy.maxAngle),
+        number(stats.legacy.averageComponent), number(stats.legacy.maxComponent),
+        number(stats.legacy.averageMagnitude), number(stats.legacy.maxMagnitude),
+        stats.safe.valid, stats.safe.invalid, stats.safe.fallback,
+        number(stats.safe.averageAngle), number(stats.safe.p95Angle),
+        number(stats.safe.maxAngle), number(stats.safe.averageComponent),
+        number(stats.safe.maxComponent), number(stats.safe.averageMagnitude),
+        number(stats.safe.maxMagnitude), number(minScale), number(maxScale)
     })
 
     local dataOk, dataResult = appendCsv(DATA_LOG, DATA_HEADER, dataRows)
@@ -486,7 +577,7 @@ function VectorLab:runRadialTest(vectorCount)
 
     if dataOk and summaryOk then
         self.radialStatus = string.format(
-            "Saved both CSV logs (%s bytes data / %s bytes summary)",
+            "Saved v3 CSV logs (%s bytes data / %s bytes summary)",
             tostring(dataResult), tostring(summaryResult)
         )
         self.radialDataPath = saveDirectory .. "/" .. DATA_LOG
@@ -494,11 +585,10 @@ function VectorLab:runRadialTest(vectorCount)
         print("[MeteorClad VectorLab] SUMMARY_CSV=" .. self.radialSummaryPath)
         print("[MeteorClad VectorLab] DATA_CSV=" .. self.radialDataPath)
         print(string.format(
-            "[MeteorClad VectorLab] %s count=%d valid_angles=%d invalid_directions=%d overflow=%d avg_angle=%.12g° p95=%.12g° max=%.12g° max_component=%.12g max_norm=%.12g fallbacks=%d",
-            testId, count, stats.validAngleCount, stats.invalidDirectionCount,
-            stats.overflowCount, stats.averageAngleError, stats.p95AngleError,
-            stats.maxAngleError, stats.maxComponentError,
-            stats.maxMagnitudeError, fallbackCount
+            "[MeteorClad VectorLab] %s legacy invalid=%d overflow=%d | safe invalid=%d fallback=%d | safe max angle=%.12g° max norm error=%.12g",
+            testId, stats.legacy.invalid, stats.legacy.overflow,
+            stats.safe.invalid, stats.safe.fallback,
+            stats.safe.maxAngle, stats.safe.maxMagnitude
         ))
     else
         self.radialStatus = "CSV error — data: " .. tostring(dataOk and "OK" or dataResult)
