@@ -16,7 +16,11 @@ local VectorLab = {
         count = 0,
         averageAngleError = 0,
         maxAngleError = 0,
-        maxMagnitudeError = 0
+        maxMagnitudeError = 0,
+        legacyAverageAngleError = 0,
+        legacyMaxAngleError = 0,
+        legacyMaxMagnitudeError = 0,
+        legacyInvalidCount = 0
     }
 }
 
