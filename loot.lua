@@ -57,7 +57,7 @@ function Loot:draw()
         self.drawBatch = CircleBatch:newBatch(math.max(CircleBatch.initialCapacity, #self.orbs))
     end
 
-    CircleBatch:prepare(self.drawBatch, #self.orbs)
+    CircleBatch:prepare(self.drawBatch)
     self.drawBatch:setColor(0.2, 1, 0.5, 1)
 
     local scaleFactor = 2 / CircleBatch.size
