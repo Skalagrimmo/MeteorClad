@@ -96,16 +96,6 @@ function VectorLab:record(enemy, x, y, dx, dy, directionX, directionY, movementS
     local actualMagnitude = math.sqrt(directionX * directionX + directionY * directionY)
     local magnitudeError = math.abs(actualMagnitude - 1)
 
-    self.vectors[#self.vectors + 1] = {
-        x = x,
-        y = y,
-        actualX = actualX,
-        actualY = actualY,
-        referenceX = referenceX,
-        referenceY = referenceY,
-        angleError = angleError
-    }
-
     self.seenThisFrame[enemy] = true
 
     local trail = self.trails[enemy]
@@ -118,6 +108,17 @@ function VectorLab:record(enemy, x, y, dx, dy, directionX, directionY, movementS
     if #trail > self.maxTrailPoints then
         table.remove(trail, 1)
     end
+
+    self.vectors[#self.vectors + 1] = {
+        x = x,
+        y = y,
+        actualX = actualX,
+        actualY = actualY,
+        referenceX = referenceX,
+        referenceY = referenceY,
+        angleError = angleError,
+        trail = trail
+    }
 
     local stats = self.frameStats
     stats.count = stats.count + 1
@@ -181,23 +182,8 @@ function VectorLab:draw()
         local offset = 1.5
 
         -- Short movement history helps expose visible path kinks.
-        local trail = nil
-        -- The current vector list intentionally stays compact; trails are keyed
-        -- by enemy and rendered from the same sampled set.
-        for enemy, points in pairs(self.trails) do
-            if points and #points > 1 then
-                -- Find the trace whose newest point is closest to this vector.
-                -- The small draw limit keeps this diagnostic-only search bounded.
-                local last = points[#points]
-                if math.abs(last.x - vector.x) < 0.001
-                    and math.abs(last.y - vector.y) < 0.001 then
-                    trail = points
-                    break
-                end
-            end
-        end
-
-        if trail then
+        local trail = vector.trail
+        if trail and #trail > 1 then
             love.graphics.setColor(0.65, 0.72, 0.82, 0.42)
             love.graphics.setLineWidth(1)
             for pointIndex = 2, #trail do
