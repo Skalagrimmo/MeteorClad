@@ -67,10 +67,6 @@ function CircleBatch:prepare(batch, requiredSprites)
     end
 end
 
-function CircleBatch:scaleForRadius(radius)
-    return (radius * 2) / self.size
-end
-
 function CircleBatch:draw(batch)
     if batch:getCount() == 0 then return end
 
