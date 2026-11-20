@@ -630,75 +630,103 @@ function VectorLab:drawRadial()
     love.graphics.setColor(0.012, 0.02, 0.038, 0.97)
     love.graphics.rectangle("fill", 0, 0, w, h)
     love.graphics.setColor(0.24, 0.42, 0.58, 0.85)
-    love.graphics.printf("VECTOR STRESS LAB — RADIAL FIELD", 0, 18, w, "center")
+    love.graphics.printf("VECTOR STRESS LAB — THREE-WAY COMPARISON", 0, 18, w, "center")
 
     love.graphics.setColor(0.12, 0.78, 1, 1)
-    love.graphics.print("CYAN: trig reference", 18, 48)
+    love.graphics.print("CYAN: trig reference", 16, 48)
     love.graphics.setColor(1, 0.58, 0.12, 1)
-    love.graphics.print("ORANGE: normalized vector", 205, 48)
+    love.graphics.print("ORANGE: PR #8", 190, 48)
+    love.graphics.setColor(0.25, 0.95, 0.48, 1)
+    love.graphics.print("GREEN: scale-safe", 315, 48)
+    love.graphics.setColor(1, 0.3, 0.32, 1)
+    love.graphics.print("RED: invalid", 465, 48)
     love.graphics.setColor(0.82, 0.88, 0.96, 1)
-    love.graphics.print("[1] 100 vectors   [2] 500 vectors   [3] 1000 vectors", 18, 72)
+    love.graphics.print("[1] 100 vectors   [2] 500 vectors   [3] 1000 vectors", 16, 74)
 
     if #self.radialVectors > 0 then
         local centerX = w * 0.5
-        local centerY = h * 0.57
-        local radius = math.min(w, h) * 0.39
+        local centerY = h * 0.52
+        local radius = math.min(w, h) * 0.35
         love.graphics.setColor(0.18, 0.32, 0.44, 0.55)
         love.graphics.circle("line", centerX, centerY, radius)
 
         local stride = math.max(1, math.ceil(#self.radialVectors / self.maxRadialDrawVectors))
         for index = 1, #self.radialVectors, stride do
             local vector = self.radialVectors[index]
-            local perpendicularX = -vector.normalizedY
-            local perpendicularY = vector.normalizedX
+            local perpendicularX = -vector.safe.y
+            local perpendicularY = vector.safe.x
 
             love.graphics.setLineWidth(1)
             love.graphics.setColor(0.12, 0.78, 1, 0.9)
             drawArrow(
-                vector.x + perpendicularX * 1.2,
-                vector.y + perpendicularY * 1.2,
+                vector.x + perpendicularX * 2.4,
+                vector.y + perpendicularY * 2.4,
                 vector.referenceX, vector.referenceY, 17
             )
 
-            love.graphics.setColor(1, 0.58, 0.12, 0.98)
+            if vector.legacy.directionValid then
+                love.graphics.setColor(1, 0.58, 0.12, 0.98)
+                drawArrow(
+                    vector.x, vector.y,
+                    vector.legacy.x, vector.legacy.y, 17
+                )
+            else
+                love.graphics.setColor(1, 0.3, 0.32, 1)
+                love.graphics.line(vector.x - 3, vector.y - 3, vector.x + 3, vector.y + 3)
+                love.graphics.line(vector.x - 3, vector.y + 3, vector.x + 3, vector.y - 3)
+            end
+
+            love.graphics.setColor(0.25, 0.95, 0.48, 0.98)
             drawArrow(
-                vector.x - perpendicularX * 1.2,
-                vector.y - perpendicularY * 1.2,
-                vector.normalizedX, vector.normalizedY, 17
+                vector.x - perpendicularX * 2.4,
+                vector.y - perpendicularY * 2.4,
+                vector.safe.x, vector.safe.y, 17
             )
         end
     else
         love.graphics.setColor(0.72, 0.8, 0.9, 0.85)
         love.graphics.printf(
-            "This mode pauses gameplay. Choose a radial test to generate the vector field.",
+            "This mode pauses gameplay. Choose a radial test to compare all three directions.",
             70, h * 0.46, w - 140, "center"
         )
     end
 
     if self.radialStats then
         local stats = self.radialStats
-        love.graphics.setColor(0.015, 0.025, 0.045, 0.94)
-        love.graphics.rectangle("fill", 10, h - 132, w - 20, 122, 5, 5)
+        love.graphics.setColor(0.015, 0.025, 0.045, 0.95)
+        love.graphics.rectangle("fill", 10, h - 158, w - 20, 148, 5, 5)
         love.graphics.setColor(0.25, 0.62, 0.82, 0.95)
-        love.graphics.rectangle("line", 10, h - 132, w - 20, 122, 5, 5)
+        love.graphics.rectangle("line", 10, h - 158, w - 20, 148, 5, 5)
+
         love.graphics.setColor(0.94, 0.97, 1, 1)
         love.graphics.print(string.format(
-            "%s | mean Δangle %.10g° | P95 %.10g° | max %.10g°",
-            stats.testId, stats.averageAngleError,
-            stats.p95AngleError, stats.maxAngleError
-        ), 20, h - 123)
+            "%s | PR #8 invalid %d (overflow %d) | scale-safe invalid %d",
+            stats.testId, stats.legacy.invalid, stats.legacy.overflow, stats.safe.invalid
+        ), 20, h - 149)
+
+        love.graphics.setColor(1, 0.68, 0.3, 1)
         love.graphics.print(string.format(
-            "component max %.3e | norm max %.3e",
-            stats.maxComponentError, stats.maxMagnitudeError
-        ), 20, h - 101)
+            "PR #8: mean angle %.3e° | P95 %.3e° | max norm error %.3e",
+            stats.legacy.averageAngle, stats.legacy.p95Angle,
+            stats.legacy.maxMagnitude
+        ), 20, h - 127)
+
+        love.graphics.setColor(0.35, 1, 0.58, 1)
         love.graphics.print(string.format(
-            "fallbacks %d | invalid directions %d | squared-distance overflow %d",
-            stats.fallbackCount, stats.invalidDirectionCount, stats.overflowCount
-        ), 20, h - 79)
-        love.graphics.print(self.radialStatus or "CSV status unavailable", 20, h - 57)
+            "SAFE: mean angle %.3e° | P95 %.3e° | max norm error %.3e",
+            stats.safe.averageAngle, stats.safe.p95Angle,
+            stats.safe.maxMagnitude
+        ), 20, h - 105)
+
+        love.graphics.setColor(0.9, 0.94, 1, 1)
+        love.graphics.print(string.format(
+            "Legacy fallback %d | safe zero fallback %d | safe invalid %d",
+            stats.legacy.fallback, stats.safe.fallback, stats.safe.invalid
+        ), 20, h - 83)
+        love.graphics.print(self.radialStatus or "CSV status unavailable", 20, h - 61)
         love.graphics.print(
-            "CSV v2 files are in the LÖVE save directory. F6 = benchmark; Esc/F8 = close.",
-            20, h - 35
+            "CSV v3: summary + per-vector data in LÖVE save directory. F6 = benchmark; Esc/F8 = close.",
+            20, h - 39
         )
     else
         love.graphics.setColor(0.78, 0.85, 0.94, 0.9)
@@ -708,7 +736,6 @@ function VectorLab:drawRadial()
         )
     end
 end
-
 function VectorLab:draw()
     if self.radialOpen then
         love.graphics.push("all")
