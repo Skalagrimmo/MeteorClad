@@ -94,7 +94,7 @@ function Projectiles:draw()
         self.drawBatch = CircleBatch:newBatch(math.max(CircleBatch.initialCapacity, requiredSprites))
     end
 
-    CircleBatch:prepare(self.drawBatch, requiredSprites)
+    CircleBatch:prepare(self.drawBatch)
 
     local scaleFactor = 2 / CircleBatch.size
     local origin = CircleBatch.origin
