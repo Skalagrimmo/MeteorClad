@@ -94,7 +94,13 @@ function love.mousepressed(x, y, button, istouch)
 end
 
 function love.touchpressed(id, x, y, dx, dy, pressure)
-    if Benchmark:touchpressed(x, y) then return end
+    if Benchmark:touchpressed(x, y) then
+        -- The Android TEST launcher can open F6 without a keyboard event.
+        if Benchmark.open and VectorLab.active then
+            VectorLab:setActive(false)
+        end
+        return
+    end
 end
 
 local function drawProfiled(sectionName, system, profiling)
