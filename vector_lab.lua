@@ -214,28 +214,29 @@ function VectorLab:draw()
     end
 
     local stats = self.stats
+    local panelX, panelY = 230, 8
     local panelWidth = 430
     local panelHeight = 94
     love.graphics.setColor(0.015, 0.025, 0.045, 0.88)
-    love.graphics.rectangle("fill", 8, 8, panelWidth, panelHeight, 5, 5)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 5, 5)
     love.graphics.setColor(0.25, 0.62, 0.82, 0.95)
-    love.graphics.rectangle("line", 8, 8, panelWidth, panelHeight, 5, 5)
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 5, 5)
 
     love.graphics.setColor(0.95, 0.97, 1, 1)
-    love.graphics.print("VECTOR LAB  |  ACTIVE — F7: OFF", 18, 15)
+    love.graphics.print("VECTOR LAB  |  ACTIVE — F7: OFF", panelX + 10, panelY + 7)
     love.graphics.setColor(0.12, 0.78, 1, 1)
-    love.graphics.print("CYAN: trig reference", 18, 35)
+    love.graphics.print("CYAN: trig reference", panelX + 10, panelY + 27)
     love.graphics.setColor(1, 0.58, 0.12, 1)
-    love.graphics.print("ORANGE: normalized vector", 175, 35)
+    love.graphics.print("ORANGE: normalized vector", panelX + 167, panelY + 27)
     love.graphics.setColor(0.9, 0.94, 1, 1)
     love.graphics.print(string.format(
         "n=%d  mean Δangle=%.8f°  max Δangle=%.8f°",
         stats.count, stats.averageAngleError, stats.maxAngleError
-    ), 18, 55)
+    ), panelX + 10, panelY + 47)
     love.graphics.print(string.format(
         "max |norm - 1|=%.3e  |  F6 = benchmark / auto-off",
         stats.maxMagnitudeError
-    ), 18, 74)
+    ), panelX + 10, panelY + 66)
 
     love.graphics.pop()
 end
