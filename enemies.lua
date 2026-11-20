@@ -13,6 +13,9 @@ end
 
 function Enemies:clear()
     self.list = {}
+    if ctx.vectorLab then
+        ctx.vectorLab:reset()
+    end
 end
 
 function Enemies:spawn(typeName, x, y, waveScale)
@@ -103,6 +106,12 @@ end
 
 function Enemies:update(dt)
     local Player = ctx.player
+    local vectorLab = ctx.vectorLab
+    local vectorLabActive = vectorLab and vectorLab.active == true
+
+    if vectorLabActive then
+        vectorLab:beginFrame()
+    end
 
     for i = #self.list, 1, -1 do
         local e = self.list[i]
@@ -151,6 +160,13 @@ function Enemies:update(dt)
 
                 e.x = e.x + directionX * movementSpeed * dt
                 e.y = e.y + directionY * movementSpeed * dt
+
+                if vectorLabActive then
+                    vectorLab:record(
+                        e, e.x, e.y, dx, dy,
+                        directionX, directionY, movementSpeed
+                    )
+                end
             end
 
             -- Preserve the original update order: move first, then spawn the
@@ -174,6 +190,10 @@ function Enemies:update(dt)
                 self:kill(i)
             end
         end
+    end
+
+    if vectorLabActive then
+        vectorLab:endFrame()
     end
 end
 

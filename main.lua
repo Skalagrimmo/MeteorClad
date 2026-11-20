@@ -11,6 +11,7 @@ local Player = require("player")
 local Game = require("game")
 local UI = require("ui")
 local Benchmark = require("benchmark")
+local VectorLab = require("vector_lab")
 local CircleBatch = require("circle_batch")
 
 local ctx = {
@@ -24,7 +25,8 @@ local ctx = {
     player = Player,
     game = Game,
     ui = UI,
-    benchmark = Benchmark
+    benchmark = Benchmark,
+    vectorLab = VectorLab
 }
 
 Loot:bind(ctx)
@@ -34,6 +36,7 @@ Player:bind(ctx)
 Game:bind(ctx)
 UI:bind(ctx)
 Benchmark:bind(ctx)
+VectorLab:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -67,24 +70,45 @@ end
 function love.update(dt)
     if Benchmark.open then
         Benchmark:update(dt)
+    elseif VectorLab.radialOpen then
+        -- The controlled radial test is stationary; pause the game simulation.
+        return
     else
         Game:update(dt)
     end
 end
 
 function love.keypressed(key)
+    -- F6 always closes VectorLab modes before opening the benchmark panel.
+    if key == "f6" then
+        if VectorLab.radialOpen then
+            VectorLab:closeRadial()
+        end
+        if VectorLab.active then
+            VectorLab:setActive(false)
+        end
+    end
+
     if Benchmark:keypressed(key) then return end
+    if VectorLab:keypressed(key) then return end
     Game:keypressed(key)
 end
 
 function love.mousepressed(x, y, button, istouch)
-    if Benchmark.open then return end
+    if Benchmark.open or VectorLab.radialOpen then return end
     if istouch and Benchmark:isMobileLauncherHit(x, y) then return end
     Game:mousepressed(x, y, button)
 end
 
 function love.touchpressed(id, x, y, dx, dy, pressure)
-    if Benchmark:touchpressed(x, y) then return end
+    if VectorLab.radialOpen then return end
+    if Benchmark:touchpressed(x, y) then
+        -- The Android TEST launcher can open F6 without a keyboard event.
+        if Benchmark.open and VectorLab.active then
+            VectorLab:setActive(false)
+        end
+        return
+    end
 end
 
 local function drawProfiled(sectionName, system, profiling)
@@ -98,6 +122,11 @@ local function drawProfiled(sectionName, system, profiling)
 end
 
 function love.draw()
+    if VectorLab.radialOpen then
+        VectorLab:draw()
+        return
+    end
+
     local profiling = Benchmark:isCollectingProfile()
     local startedAt = profiling and love.timer.getTime() or nil
 
@@ -107,6 +136,7 @@ function love.draw()
     drawProfiled("projectiles_draw_cpu", Projectiles, profiling)
     drawProfiled("ui_draw_cpu", UI, profiling)
     drawProfiled("benchmark_draw_cpu", Benchmark, profiling)
+    VectorLab:draw()
 
     if profiling then
         Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
