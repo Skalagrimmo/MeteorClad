@@ -156,11 +156,15 @@ function Enemies:draw()
         end
         love.graphics.circle("fill", e.x, e.y, e.radius)
 
-        local barW = e.radius * 2
-        love.graphics.setColor(0, 0, 0)
-        love.graphics.rectangle("fill", e.x - e.radius, e.y - e.radius - 9, barW, 4)
-        love.graphics.setColor(0.2, 0.9, 0.2)
-        love.graphics.rectangle("fill", e.x - e.radius, e.y - e.radius - 9, barW * Utils.clamp(e.hp / e.maxHp, 0, 1), 4)
+        -- Full-health enemies do not need a visible HP bar. Avoid drawing
+        -- its background and foreground until the enemy has taken damage.
+        if e.hp < e.maxHp then
+            local barW = e.radius * 2
+            love.graphics.setColor(0, 0, 0)
+            love.graphics.rectangle("fill", e.x - e.radius, e.y - e.radius - 9, barW, 4)
+            love.graphics.setColor(0.2, 0.9, 0.2)
+            love.graphics.rectangle("fill", e.x - e.radius, e.y - e.radius - 9, barW * Utils.clamp(e.hp / e.maxHp, 0, 1), 4)
+        end
     end
 end
 
