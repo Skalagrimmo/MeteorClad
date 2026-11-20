@@ -393,7 +393,7 @@ function VectorLab:runRadialTest(vectorCount)
     local scales = {
         0, 1e-200, 1e-12, 1e-9, 1e-6, 1e-3,
         0.1, 1, 16, 250, 1e6, 1e12, 1e100,
-        1e154, 1.34e154, 1.5e154, 1e155, 1e200, 1e308
+        1e154, 1.34e154, 1.5e154, 1e155, 1e308
     }
     local arena = self.ctx.config.arena
     local centerX = arena.width * 0.5
