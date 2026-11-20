@@ -20,11 +20,13 @@ local VectorLab = {
     }
 }
 
-local SUMMARY_LOG = "vector_lab_summary.csv"
-local DATA_LOG = "vector_lab_vectors.csv"
+-- v2 uses a new schema so previous CSV logs remain intact.
+local SUMMARY_LOG = "vector_lab_summary_v2.csv"
+local DATA_LOG = "vector_lab_vectors_v2.csv"
 
 local SUMMARY_HEADER = table.concat({
     "time_local", "time_utc", "run_id", "test_id", "vector_count",
+    "valid_angle_vectors", "invalid_direction_vectors", "overflow_vectors",
     "average_angle_error_deg", "p95_angle_error_deg", "max_angle_error_deg",
     "average_component_error", "max_component_error",
     "average_magnitude_error", "max_magnitude_error",
@@ -34,6 +36,7 @@ local SUMMARY_HEADER = table.concat({
 local DATA_HEADER = table.concat({
     "time_local", "time_utc", "run_id", "test_id", "vector_index",
     "vector_case", "dx", "dy", "input_magnitude", "distance_squared",
+    "normalization_status", "direction_valid",
     "reference_x", "reference_y", "normalized_x", "normalized_y",
     "angle_error_deg", "component_error", "magnitude_error", "used_fallback"
 }, ",")
@@ -43,7 +46,11 @@ local function clamp(value, minimum, maximum)
 end
 
 local function number(value)
-    return string.format("%.17g", value or 0)
+    if value == nil then return "" end
+    if value == math.huge then return "inf" end
+    if value == -math.huge then return "-inf" end
+    if value ~= value then return "nan" end
+    return string.format("%.17g", value)
 end
 
 local function csvEscape(value)
@@ -77,28 +84,47 @@ local function compareVector(dx, dy)
     local normalizedX
     local normalizedY
     local usedFallback = distanceSquared <= 0
+    local overflowedDistance = distanceSquared == math.huge
+    local normalizationStatus
 
-    if not usedFallback then
-        local inverseDistance = 1 / math.sqrt(distanceSquared)
-        normalizedX = dx * inverseDistance
-        normalizedY = dy * inverseDistance
-    else
+    if overflowedDistance then
+        -- Reproduce PR #8: inverse sqrt(infinity) becomes zero, collapsing
+        -- the normalized vector. Do not disguise this as a zero-angle result.
+        normalizedX = 0
+        normalizedY = 0
+        normalizationStatus = "distance_squared_overflow"
+    elseif usedFallback then
         -- Match MeteorClad's explicit zero/underflow-distance fallback.
         normalizedX = math.cos(referenceAngle)
         normalizedY = math.sin(referenceAngle)
+        normalizationStatus = (dx == 0 and dy == 0)
+            and "zero_length_fallback"
+            or "underflow_fallback"
+    else
+        local inverseDistance = 1 / math.sqrt(distanceSquared)
+        normalizedX = dx * inverseDistance
+        normalizedY = dy * inverseDistance
+        normalizationStatus = "normalized"
     end
 
-    local dot = clamp(
-        normalizedX * referenceX + normalizedY * referenceY,
-        -1, 1
-    )
-    local cross = normalizedX * referenceY - normalizedY * referenceX
-    local angleError = math.deg(math.atan2(math.abs(cross), dot))
+    local magnitude = math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY)
+    local directionValid = magnitude > 0 and magnitude < math.huge
+        and magnitude == magnitude
+    local angleError
+
+    if directionValid then
+        local dot = clamp(
+            normalizedX * referenceX + normalizedY * referenceY,
+            -1, 1
+        )
+        local cross = normalizedX * referenceY - normalizedY * referenceX
+        angleError = math.deg(math.atan2(math.abs(cross), dot))
+    end
+
     local componentError = math.max(
         math.abs(normalizedX - referenceX),
         math.abs(normalizedY - referenceY)
     )
-    local magnitude = math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY)
     local magnitudeError = math.abs(magnitude - 1)
 
     return {
@@ -112,7 +138,10 @@ local function compareVector(dx, dy)
         angleError = angleError,
         componentError = componentError,
         magnitudeError = magnitudeError,
-        usedFallback = usedFallback
+        usedFallback = usedFallback,
+        overflowedDistance = overflowedDistance,
+        directionValid = directionValid,
+        normalizationStatus = normalizationStatus
     }
 end
 
@@ -308,7 +337,8 @@ function VectorLab:runRadialTest(vectorCount)
 
     local scales = {
         0, 1e-200, 1e-12, 1e-9, 1e-6, 1e-3,
-        0.1, 1, 16, 250, 1e6, 1e12, 1e100
+        0.1, 1, 16, 250, 1e6, 1e12, 1e100,
+        1e154, 1.34e154, 1.5e154, 1e155, 1e200
     }
     local arena = self.ctx.config.arena
     local centerX = arena.width * 0.5
@@ -324,6 +354,9 @@ function VectorLab:runRadialTest(vectorCount)
     local maxComponentError = 0
     local maxMagnitudeError = 0
     local fallbackCount = 0
+    local overflowCount = 0
+    local invalidDirectionCount = 0
+    local validAngleCount = 0
     local minScale = math.huge
     local maxScale = 0
 
@@ -372,17 +405,25 @@ function VectorLab:runRadialTest(vectorCount)
             referenceY = comparison.referenceY,
             normalizedX = comparison.normalizedX,
             normalizedY = comparison.normalizedY,
-            angleError = comparison.angleError
+            angleError = comparison.angleError,
+            directionValid = comparison.directionValid,
+            normalizationStatus = comparison.normalizationStatus
         }
 
-        angleErrors[#angleErrors + 1] = comparison.angleError
-        angleErrorTotal = angleErrorTotal + comparison.angleError
+        if comparison.directionValid then
+            angleErrors[#angleErrors + 1] = comparison.angleError
+            angleErrorTotal = angleErrorTotal + comparison.angleError
+            maxAngleError = math.max(maxAngleError, comparison.angleError)
+            validAngleCount = validAngleCount + 1
+        else
+            invalidDirectionCount = invalidDirectionCount + 1
+        end
         componentErrorTotal = componentErrorTotal + comparison.componentError
         magnitudeErrorTotal = magnitudeErrorTotal + comparison.magnitudeError
-        maxAngleError = math.max(maxAngleError, comparison.angleError)
         maxComponentError = math.max(maxComponentError, comparison.componentError)
         maxMagnitudeError = math.max(maxMagnitudeError, comparison.magnitudeError)
         if comparison.usedFallback then fallbackCount = fallbackCount + 1 end
+        if comparison.overflowedDistance then overflowCount = overflowCount + 1 end
         minScale = math.min(minScale, scale)
         maxScale = math.max(maxScale, scale)
     end
@@ -391,7 +432,10 @@ function VectorLab:runRadialTest(vectorCount)
     local count = #vectors
     local stats = {
         count = count,
-        averageAngleError = angleErrorTotal / math.max(1, count),
+        validAngleCount = validAngleCount,
+        invalidDirectionCount = invalidDirectionCount,
+        overflowCount = overflowCount,
+        averageAngleError = angleErrorTotal / math.max(1, validAngleCount),
         p95AngleError = percentile(angleErrors, 0.95),
         maxAngleError = maxAngleError,
         averageComponentError = componentErrorTotal / math.max(1, count),
@@ -413,7 +457,8 @@ function VectorLab:runRadialTest(vectorCount)
         dataRows[#dataRows + 1] = csvRow({
             timeLocal, timeUtc, runId, testId, index, vector.caseName,
             number(vector.dx), number(vector.dy), number(vector.scale),
-            number(comparison.distanceSquared),
+            number(comparison.distanceSquared), comparison.normalizationStatus,
+            tostring(comparison.directionValid),
             number(comparison.referenceX), number(comparison.referenceY),
             number(comparison.normalizedX), number(comparison.normalizedY),
             number(comparison.angleError), number(comparison.componentError),
@@ -423,6 +468,7 @@ function VectorLab:runRadialTest(vectorCount)
 
     local summaryRow = csvRow({
         timeLocal, timeUtc, runId, testId, count,
+        stats.validAngleCount, stats.invalidDirectionCount, stats.overflowCount,
         number(stats.averageAngleError), number(stats.p95AngleError),
         number(stats.maxAngleError), number(stats.averageComponentError),
         number(stats.maxComponentError), number(stats.averageMagnitudeError),
@@ -539,23 +585,27 @@ function VectorLab:drawRadial()
     if self.radialStats then
         local stats = self.radialStats
         love.graphics.setColor(0.015, 0.025, 0.045, 0.94)
-        love.graphics.rectangle("fill", 10, h - 112, w - 20, 102, 5, 5)
+        love.graphics.rectangle("fill", 10, h - 132, w - 20, 122, 5, 5)
         love.graphics.setColor(0.25, 0.62, 0.82, 0.95)
-        love.graphics.rectangle("line", 10, h - 112, w - 20, 102, 5, 5)
+        love.graphics.rectangle("line", 10, h - 132, w - 20, 122, 5, 5)
         love.graphics.setColor(0.94, 0.97, 1, 1)
         love.graphics.print(string.format(
             "%s | mean Δangle %.10g° | P95 %.10g° | max %.10g°",
             stats.testId, stats.averageAngleError,
             stats.p95AngleError, stats.maxAngleError
-        ), 20, h - 103)
+        ), 20, h - 123)
         love.graphics.print(string.format(
-            "component max %.3e | norm max %.3e | zero/underflow fallback: %d",
-            stats.maxComponentError, stats.maxMagnitudeError, stats.fallbackCount
-        ), 20, h - 81)
-        love.graphics.print(self.radialStatus or "CSV status unavailable", 20, h - 59)
+            "component max %.3e | norm max %.3e",
+            stats.maxComponentError, stats.maxMagnitudeError
+        ), 20, h - 101)
+        love.graphics.print(string.format(
+            "fallbacks %d | invalid directions %d | squared-distance overflow %d",
+            stats.fallbackCount, stats.invalidDirectionCount, stats.overflowCount
+        ), 20, h - 79)
+        love.graphics.print(self.radialStatus or "CSV status unavailable", 20, h - 57)
         love.graphics.print(
-            "CSV files are in the LÖVE save directory. F6 = benchmark; Esc/F8 = close.",
-            20, h - 37
+            "CSV v2 files are in the LÖVE save directory. F6 = benchmark; Esc/F8 = close.",
+            20, h - 35
         )
     else
         love.graphics.setColor(0.78, 0.85, 0.94, 0.9)
