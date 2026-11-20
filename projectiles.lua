@@ -3,6 +3,8 @@ local Projectiles = {
     list = {}
 }
 
+local CircleBatch = require("circle_batch")
+
 local ctx
 
 function Projectiles:bind(gameCtx)
@@ -85,19 +87,41 @@ function Projectiles:update(dt)
 end
 
 function Projectiles:draw()
+    if #self.list == 0 then return end
+
+    local requiredSprites = #self.list * 2
+    if not self.drawBatch then
+        self.drawBatch = CircleBatch:newBatch(math.max(CircleBatch.initialCapacity, requiredSprites))
+    end
+
+    CircleBatch:prepare(self.drawBatch, requiredSprites)
+
+    local scaleFactor = 2 / CircleBatch.size
+    local origin = CircleBatch.origin
+
     for _, p in ipairs(self.list) do
         if p.owner == "enemy" then
-            love.graphics.setColor(0.95, 0.3, 1.0)
-            love.graphics.circle("fill", p.x, p.y, p.radius)
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("fill", p.x, p.y, p.radius * 0.4)
+            self.drawBatch:setColor(0.95, 0.3, 1.0, 1)
+            local outerScale = p.radius * scaleFactor
+            self.drawBatch:add(p.x, p.y, 0, outerScale, outerScale, origin, origin)
+
+            self.drawBatch:setColor(1, 1, 1, 1)
+            local innerScale = p.radius * 0.4 * scaleFactor
+            self.drawBatch:add(p.x, p.y, 0, innerScale, innerScale, origin, origin)
         else
-            love.graphics.setColor(0.2, 0.9, 1.0)
-            love.graphics.circle("fill", p.x, p.y, p.radius)
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("fill", p.x, p.y, p.radius * 0.5)
+            self.drawBatch:setColor(0.2, 0.9, 1.0, 1)
+            local outerScale = p.radius * scaleFactor
+            self.drawBatch:add(p.x, p.y, 0, outerScale, outerScale, origin, origin)
+
+            self.drawBatch:setColor(1, 1, 1, 1)
+            local innerScale = p.radius * 0.5 * scaleFactor
+            self.drawBatch:add(p.x, p.y, 0, innerScale, innerScale, origin, origin)
         end
     end
+
+    -- Sprites are inserted as outer/core pairs, preserving the original
+    -- per-projectile painter order even when projectiles overlap.
+    CircleBatch:draw(self.drawBatch)
 end
 
 return Projectiles
