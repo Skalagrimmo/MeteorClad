@@ -4,6 +4,11 @@ return {
         width = 800,
         height = 600
     },
+    window = {
+        resizableDesktop = true,
+        minWidth = 640,
+        minHeight = 480
+    },
     -- World-space bounds are larger than the visible viewport.
     world = {
         width = 1200,
