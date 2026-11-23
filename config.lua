@@ -9,13 +9,15 @@ return {
         minWidth = 640,
         minHeight = 480
     },
-    -- World-space bounds are larger than the visible viewport.
+    -- A broad black world: three logical viewports wide and high.
     world = {
-        width = 1200,
-        height = 900
+        width = 2400,
+        height = 1800
     },
     game = {
-        waveDelay = 2.0
+        waveDelay = 2.0,
+        -- Keep incoming waves just beyond the camera view as the world grows.
+        enemySpawnMargin = 80
     },
     enemyTypes = {
         grunt = {
