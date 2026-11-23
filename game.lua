@@ -27,6 +27,7 @@ function Game:reset()
     ctx.enemies:clear()
     ctx.projectiles:clear()
     ctx.loot:clear()
+    if ctx.portals then ctx.portals:reset() end
     ctx.enemies:spawnWave(self.wave)
 end
 
@@ -100,6 +101,13 @@ function Game:update(dt)
     ctx.player:update(dt)
     if profiling then
         profiler:recordProfile("player_update", love.timer.getTime() - startedAt)
+    end
+    if self.state ~= "playing" then return end
+
+    if profiling then startedAt = love.timer.getTime() end
+    ctx.portals:update(dt)
+    if profiling then
+        profiler:recordProfile("portals_update", love.timer.getTime() - startedAt)
     end
     if self.state ~= "playing" then return end
 
