@@ -74,6 +74,21 @@ local function enemyClearance(x, y, player)
     return nearest
 end
 
+local function fogAffinity(x, y)
+    local fog = ctx.fog
+    if not fog or not fog.enabled then return 0 end
+
+    local best = 0
+    for _, patch in ipairs(fog.patches) do
+        local dx = (x - patch.x) / (patch.width * 0.58)
+        local dy = (y - patch.y) / (patch.height * 0.48)
+        local normalized = dx * dx + dy * dy
+        local affinity = clamp(1 - normalized, 0, 1)
+        if affinity > best then best = affinity end
+    end
+    return best
+end
+
 function Portals:spawn()
     local settings = ctx.config.portals or {}
     local world = ctx.config.world
@@ -110,11 +125,13 @@ function Portals:spawn()
             local actualDistance = distance(player.x, player.y, x, y)
             if actualDistance >= minDistance * 0.72 then
                 local clearance = enemyClearance(x, y, player)
-                local score = clearance + self:nextRandom() * 18
+                local mistAffinity = fogAffinity(x, y)
+                local score = math.min(clearance, 420)
+                    + mistAffinity * 220 + self:nextRandom() * 18
                 if bestScore == nil or score > bestScore then
                     bestX, bestY, bestScore = x, y, score
                 end
-                if clearance >= 105 then break end
+                if clearance >= 105 and mistAffinity >= 0.18 then break end
             end
         end
     end
