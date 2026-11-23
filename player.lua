@@ -8,9 +8,9 @@ function Player:bind(gameCtx)
 end
 
 function Player:init()
-    local arena = ctx.config.arena
-    self.x = arena.width / 2
-    self.y = arena.height / 2
+    local arena = ctx.config.world
+    self.x = world.width / 2
+    self.y = world.height / 2
     self.radius = 18
     self.speed = 220
     self.hp = 100
@@ -87,6 +87,7 @@ function Player:dash()
 
     if dx == 0 and dy == 0 then
         local mx, my = love.mouse.getPosition()
+        mx, my = ctx.camera:screenToWorld(mx, my)
         local angle = math.atan2(my - self.y, mx - self.x)
         dx, dy = math.cos(angle), math.sin(angle)
     else
@@ -123,7 +124,7 @@ function Player:whirlwind()
 end
 
 function Player:update(dt)
-    local arena = ctx.config.arena
+    local arena = ctx.config.world
     local Utils = ctx.utils
 
     if self.invulnTimer > 0 then self.invulnTimer = math.max(0, self.invulnTimer - dt) end
@@ -160,8 +161,8 @@ function Player:update(dt)
         end
     end
 
-    self.x = Utils.clamp(self.x, self.radius, arena.width - self.radius)
-    self.y = Utils.clamp(self.y, self.radius, arena.height - self.radius)
+    self.x = Utils.clamp(self.x, self.radius, world.width - self.radius)
+    self.y = Utils.clamp(self.y, self.radius, world.height - self.radius)
 end
 
 function Player:draw()
