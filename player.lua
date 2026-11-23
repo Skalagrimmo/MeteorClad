@@ -87,6 +87,8 @@ function Player:dash()
 
     if dx == 0 and dy == 0 then
         local mx, my = love.mouse.getPosition()
+        mx, my = ctx.viewport:screenToViewport(mx, my)
+        mx, my = ctx.viewport:clamp(mx, my)
         mx, my = ctx.camera:screenToWorld(mx, my)
         local angle = math.atan2(my - self.y, mx - self.x)
         dx, dy = math.cos(angle), math.sin(angle)
