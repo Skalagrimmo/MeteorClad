@@ -64,11 +64,23 @@ function UI:draw()
         love.graphics.setColor(0, 0, 0, 0.8)
         love.graphics.rectangle("fill", 0, 0, w, h)
         love.graphics.setColor(1, 0.85, 0.2)
-        love.graphics.printf("НОВИЙ РІВЕНЬ (" .. Player.level .. ")! ОБЕРІТЬ ПОКРАЩЕННЯ:", 0, 140, w, "center")
+        local levelUpTitle
+        if Game.choiceType == "mastery" then
+            levelUpTitle = "МАЙСТЕРНІСТЬ ВЕТЕРАНА (" .. Player.level .. ") — ОБЕРІТЬ ПОКРАЩЕННЯ:"
+        else
+            levelUpTitle = "НОВИЙ РІВЕНЬ (" .. Player.level .. ")! ОБЕРІТЬ ПОКРАЩЕННЯ:"
+        end
+        love.graphics.printf(levelUpTitle, 0, 140, w, "center")
 
         for i, choice in ipairs(Game.choices) do
             local cardX = 110 + (i - 1) * 200
-            local nextRank = (Player.upgradeRanks[choice.id] or 0) + 1
+            local rankTable = choice.category == "mastery"
+                and Player.masteryRanks
+                or Player.upgradeRanks
+            local nextRank = (rankTable[choice.id] or 0) + 1
+            local rankLabel = choice.maxRank
+                and (nextRank .. "/" .. choice.maxRank)
+                or (nextRank .. "/∞")
 
             love.graphics.setColor(0.15, 0.18, 0.25)
             love.graphics.rectangle("fill", cardX, 200, 180, 220, 8, 8)
@@ -76,7 +88,7 @@ function UI:draw()
             love.graphics.rectangle("line", cardX, 200, 180, 220, 8, 8)
 
             love.graphics.setColor(1, 0.85, 0.2)
-            love.graphics.printf("[" .. i .. "] " .. choice.name .. " (" .. nextRank .. "/" .. choice.maxRank .. ")", cardX + 10, 220, 160, "center")
+            love.graphics.printf("[" .. i .. "] " .. choice.name .. " (" .. rankLabel .. ")", cardX + 10, 220, 160, "center")
             love.graphics.setColor(0.9, 0.9, 0.9)
             love.graphics.printf(choice.desc, cardX + 15, 280, 150, "center")
         end
