@@ -359,6 +359,7 @@ function Enemies:update(dt)
 end
 
 function Enemies:draw()
+    love.graphics.push("all")
     local Utils = ctx.utils
     local hasDamagedEnemy = false
 
@@ -398,6 +399,7 @@ function Enemies:draw()
         for _, enemy in ipairs(self.list) do
             drawEnemyGlyph(enemy)
         end
+        love.graphics.pop()
         return
     end
 
@@ -436,6 +438,7 @@ function Enemies:draw()
             )
         end
     end
+    love.graphics.pop()
 end
 
 
