@@ -1,11 +1,12 @@
 -- fog.lua
 -- Procedural, world-space mist for the expanded dark arena.
--- The texture is generated once from deterministic value noise; no assets or shaders are required.
+-- Textures are generated once; a lightweight shader animates their internal flow when supported.
 
 local Fog = {
     enabled = true,
     elapsed = 0,
     textures = {},
+    flowShader = nil,
     patches = {},
     motes = {},
     seed = 91357
@@ -14,6 +15,67 @@ local Fog = {
 local TEXTURE_WIDTH = 176
 local TEXTURE_HEIGHT = 112
 local TEXTURE_COUNT = 2
+
+-- GLSL 1.x-compatible so the effect can run on older OpenGL ES devices too.
+-- The noise field moves through texture space and gently bends the cloud edges.
+local FOG_FLOW_SHADER = [[
+extern number u_time;
+extern number u_phase;
+extern vec2 u_flow;
+extern number u_warp;
+
+number fogHash(vec2 p)
+{
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+number fogNoise(vec2 p)
+{
+    vec2 cell = floor(p);
+    vec2 local = fract(p);
+    local = local * local * (3.0 - 2.0 * local);
+
+    number top = mix(fogHash(cell), fogHash(cell + vec2(1.0, 0.0)), local.x);
+    number bottom = mix(
+        fogHash(cell + vec2(0.0, 1.0)),
+        fogHash(cell + vec2(1.0, 1.0)),
+        local.x
+    );
+    return mix(top, bottom, local.y);
+}
+
+vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
+{
+    vec2 uv = texture_coords;
+    vec2 broadMotion = vec2(
+        u_time * 0.065 * u_flow.x,
+        u_time * 0.052 * u_flow.y
+    );
+    vec2 fineMotion = vec2(
+        -u_time * 0.087 * u_flow.y,
+        u_time * 0.076 * u_flow.x
+    );
+
+    number broad = fogNoise(
+        uv * vec2(3.8, 2.7) + broadMotion + vec2(u_phase * 0.13, u_phase * 0.07)
+    );
+    number fine = fogNoise(
+        uv * vec2(8.4, 5.6) + fineMotion + vec2(u_phase * 0.19, -u_phase * 0.11)
+    );
+
+    vec2 bend = vec2(
+        (broad - 0.5) * u_warp,
+        (fine - 0.5) * u_warp * 0.8
+    );
+    bend.x += sin(uv.y * 7.0 + fine * 2.5 + u_time * 0.17 + u_phase) * 0.007;
+    bend.y += sin(uv.x * 5.5 + broad * 2.2 - u_time * 0.14 + u_phase) * 0.006;
+
+    vec4 pixel = Texel(texture, uv + bend);
+    number wispDensity = smoothstep(0.2, 0.78, fine);
+    pixel.a *= mix(0.82, 1.0, wispDensity);
+    return pixel * color;
+}
+]]
 
 local ctx
 
@@ -113,6 +175,7 @@ function Fog:init()
     self.enabled = settings.enabled ~= false
     self.elapsed = 0
     self.textures = {}
+    self.flowShader = nil
     self.patches = {}
     self.motes = {}
     self.seed = 91357
@@ -126,6 +189,15 @@ function Fog:init()
             return false
         end
         self.textures[#self.textures + 1] = textureOrError
+    end
+
+    local shaderOk, shaderOrError = pcall(love.graphics.newShader, FOG_FLOW_SHADER)
+    if shaderOk then
+        self.flowShader = shaderOrError
+        print("[MeteorClad] Dynamic fog flow shader enabled.")
+    else
+        print("[MeteorClad] Dynamic fog shader unavailable; using static fog textures: "
+            .. tostring(shaderOrError))
     end
 
     local patchCount = math.max(0, math.min(64, math.floor(settings.patchCount or 30)))
@@ -171,6 +243,9 @@ function Fog:init()
             vx = direction * driftSpeed,
             vy = (self:nextRandom() - 0.5) * driftSpeed * 0.28,
             phase = self:nextRandom() * math.pi * 2,
+            flowX = direction * (0.55 + self:nextRandom() * 0.55),
+            flowY = (self:nextRandom() - 0.5) * 0.75,
+            warp = 0.052 + self:nextRandom() * 0.022,
             pulseSpeed = 0.12 + self:nextRandom() * 0.18,
             opacity = opacity,
             color = {
@@ -254,7 +329,19 @@ function Fog:draw()
     local globalOpacity = clamp(settings.opacity or 1, 0, 1)
     local moteOpacity = clamp(settings.moteOpacity or 0.75, 0, 1)
 
+    local flowShader = self.flowShader
+    if flowShader then
+        love.graphics.setShader(flowShader)
+        flowShader:send("u_time", self.elapsed % 4096)
+    end
+
     for _, patch in ipairs(self.patches) do
+        if flowShader then
+            flowShader:send("u_phase", patch.phase)
+            flowShader:send("u_flow", patch.flowX, patch.flowY)
+            flowShader:send("u_warp", patch.warp)
+        end
+
         local pulse = 0.94 + 0.06 * math.sin(
             self.elapsed * patch.pulseSpeed + patch.phase
         )
@@ -276,6 +363,10 @@ function Fog:draw()
             TEXTURE_WIDTH * 0.5,
             TEXTURE_HEIGHT * 0.5
         )
+    end
+
+    if flowShader then
+        love.graphics.setShader()
     end
 
     -- Small dim motes suggest dust suspended in the mist, not a star field.
