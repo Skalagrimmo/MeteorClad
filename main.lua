@@ -141,8 +141,8 @@ function love.touchpressed(id, x, y, dx, dy, pressure)
 end
 
 function love.resize(w, h)
-    -- Query graphics dimensions as the authoritative DPI-scaled viewport size.
-    Viewport:update(w, h)
+    -- Recalculate from love.graphics.getDimensions(), matching draw and pointer coordinates.
+    Viewport:update()
 end
 
 local function drawProfiled(sectionName, system, profiling)
