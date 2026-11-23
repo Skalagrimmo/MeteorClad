@@ -16,6 +16,7 @@ local CircleBatch = require("circle_batch")
 local Camera = require("camera")
 local Viewport = require("viewport")
 local Fog = require("fog")
+local Portals = require("portal")
 
 local ctx = {
     config = Config,
@@ -32,7 +33,8 @@ local ctx = {
     vectorLab = VectorLab,
     camera = Camera,
     viewport = Viewport,
-    fog = Fog
+    fog = Fog,
+    portals = Portals
 }
 
 Loot:bind(ctx)
@@ -46,6 +48,7 @@ VectorLab:bind(ctx)
 Camera:bind(ctx)
 Viewport:bind(ctx)
 Fog:bind(ctx)
+Portals:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -184,6 +187,7 @@ function love.draw()
     Viewport:apply()
     Camera:apply()
     drawProfiled("fog_draw_cpu", Fog, profiling)
+    drawProfiled("portals_draw_cpu", Portals, profiling)
     drawProfiled("loot_draw_cpu", Loot, profiling)
     drawProfiled("player_draw_cpu", Player, profiling)
     drawProfiled("enemies_draw_cpu", Enemies, profiling)
