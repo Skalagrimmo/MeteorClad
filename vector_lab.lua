@@ -16,7 +16,11 @@ local VectorLab = {
         count = 0,
         averageAngleError = 0,
         maxAngleError = 0,
-        maxMagnitudeError = 0
+        maxMagnitudeError = 0,
+        legacyAverageAngleError = 0,
+        legacyMaxAngleError = 0,
+        legacyMaxMagnitudeError = 0,
+        legacyInvalidCount = 0
     }
 }
 
@@ -238,7 +242,11 @@ function VectorLab:reset()
         count = 0,
         averageAngleError = 0,
         maxAngleError = 0,
-        maxMagnitudeError = 0
+        maxMagnitudeError = 0,
+        legacyAverageAngleError = 0,
+        legacyMaxAngleError = 0,
+        legacyMaxMagnitudeError = 0,
+        legacyInvalidCount = 0
     }
 end
 
@@ -251,7 +259,7 @@ function VectorLab:setActive(active)
 
     if self.active then
         print("[MeteorClad VectorLab] LIVE mode active — press F7 to disable.")
-        print("[MeteorClad VectorLab] Cyan = trig reference; orange = normalized vector.")
+        print("[MeteorClad VectorLab] Cyan = trig reference; orange = PR #8; green = scale-safe movement.")
     else
         print("[MeteorClad VectorLab] Live mode disabled.")
     end
@@ -316,9 +324,12 @@ function VectorLab:beginFrame()
     self.frameStats = {
         count = 0,
         angleErrorTotal = 0,
-        averageAngleError = 0,
         maxAngleError = 0,
-        maxMagnitudeError = 0
+        maxMagnitudeError = 0,
+        legacyAngleErrorTotal = 0,
+        legacyMaxAngleError = 0,
+        legacyMaxMagnitudeError = 0,
+        legacyInvalidCount = 0
     }
 end
 
@@ -327,19 +338,55 @@ function VectorLab:record(enemy, x, y, dx, dy, directionX, directionY, movementS
 
     -- movementSpeed may be negative for ranged enemies retreating from the player.
     local movementSign = movementSpeed < 0 and -1 or 1
-    local actualX = directionX * movementSign
-    local actualY = directionY * movementSign
+
+    -- Keep the original PR #8 normalization live as a diagnostic reference.
+    -- This calculation runs only while F7 is enabled; gameplay always moves
+    -- with the scale-safe direction supplied by Enemies:update().
+    local legacyDistanceSquared = dx * dx + dy * dy
+    local legacyX
+    local legacyY
+    if legacyDistanceSquared > 0 then
+        local legacyInverseDistance = 1 / math.sqrt(legacyDistanceSquared)
+        legacyX = dx * legacyInverseDistance
+        legacyY = dy * legacyInverseDistance
+    else
+        local fallbackAngle = math.atan2(dy, dx)
+        legacyX = math.cos(fallbackAngle)
+        legacyY = math.sin(fallbackAngle)
+    end
 
     local referenceAngle = math.atan2(dy, dx)
     local referenceX = math.cos(referenceAngle) * movementSign
     local referenceY = math.sin(referenceAngle) * movementSign
 
-    local dot = clamp(actualX * referenceX + actualY * referenceY, -1, 1)
-    local cross = actualX * referenceY - actualY * referenceX
-    local angleError = math.deg(math.atan2(math.abs(cross), dot))
+    local safeX = directionX * movementSign
+    local safeY = directionY * movementSign
+    local legacyMoveX = legacyX * movementSign
+    local legacyMoveY = legacyY * movementSign
 
-    local actualMagnitude = math.sqrt(directionX * directionX + directionY * directionY)
-    local magnitudeError = math.abs(actualMagnitude - 1)
+    local safeDot = clamp(safeX * referenceX + safeY * referenceY, -1, 1)
+    local safeCross = safeX * referenceY - safeY * referenceX
+    local safeAngleError = math.deg(math.atan2(math.abs(safeCross), safeDot))
+    local safeMagnitude = math.sqrt(directionX * directionX + directionY * directionY)
+    local safeMagnitudeError = math.abs(safeMagnitude - 1)
+
+    local legacyMagnitude = math.sqrt(legacyX * legacyX + legacyY * legacyY)
+    local legacyDirectionValid = legacyMagnitude > 0
+        and legacyMagnitude < math.huge and legacyMagnitude == legacyMagnitude
+    local legacyAngleError
+    local legacyMagnitudeError
+
+    if legacyDirectionValid then
+        local legacyDot = clamp(
+            legacyMoveX * referenceX + legacyMoveY * referenceY, -1, 1
+        )
+        local legacyCross = legacyMoveX * referenceY - legacyMoveY * referenceX
+        legacyAngleError = math.deg(math.atan2(math.abs(legacyCross), legacyDot))
+        legacyMagnitudeError = math.abs(legacyMagnitude - 1)
+    else
+        legacyAngleError = math.huge
+        legacyMagnitudeError = math.huge
+    end
 
     self.seenThisFrame[enemy] = true
 
@@ -357,8 +404,11 @@ function VectorLab:record(enemy, x, y, dx, dy, directionX, directionY, movementS
     self.vectors[#self.vectors + 1] = {
         x = x,
         y = y,
-        actualX = actualX,
-        actualY = actualY,
+        safeX = safeX,
+        safeY = safeY,
+        legacyX = legacyMoveX,
+        legacyY = legacyMoveY,
+        legacyDirectionValid = legacyDirectionValid,
         referenceX = referenceX,
         referenceY = referenceY,
         trail = trail
@@ -366,11 +416,18 @@ function VectorLab:record(enemy, x, y, dx, dy, directionX, directionY, movementS
 
     local stats = self.frameStats
     stats.count = stats.count + 1
-    stats.angleErrorTotal = stats.angleErrorTotal + angleError
-    stats.maxAngleError = math.max(stats.maxAngleError, angleError)
-    stats.maxMagnitudeError = math.max(stats.maxMagnitudeError, magnitudeError)
+    stats.angleErrorTotal = stats.angleErrorTotal + safeAngleError
+    stats.maxAngleError = math.max(stats.maxAngleError, safeAngleError)
+    stats.maxMagnitudeError = math.max(stats.maxMagnitudeError, safeMagnitudeError)
+    stats.legacyAngleErrorTotal = stats.legacyAngleErrorTotal + legacyAngleError
+    stats.legacyMaxAngleError = math.max(stats.legacyMaxAngleError, legacyAngleError)
+    stats.legacyMaxMagnitudeError = math.max(
+        stats.legacyMaxMagnitudeError, legacyMagnitudeError
+    )
+    if not legacyDirectionValid then
+        stats.legacyInvalidCount = stats.legacyInvalidCount + 1
+    end
 end
-
 function VectorLab:endFrame()
     if not self.active then return end
 
@@ -383,6 +440,10 @@ function VectorLab:endFrame()
     local stats = self.frameStats
     if stats.count > 0 then
         stats.averageAngleError = stats.angleErrorTotal / stats.count
+        stats.legacyAverageAngleError = stats.legacyAngleErrorTotal / stats.count
+    else
+        stats.averageAngleError = 0
+        stats.legacyAverageAngleError = 0
     end
     self.stats = stats
 end
@@ -753,9 +814,9 @@ function VectorLab:draw()
 
     for index = 1, #vectors, stride do
         local vector = vectors[index]
-        local perpendicularX = -vector.actualY
-        local perpendicularY = vector.actualX
-        local offset = 1.5
+        local perpendicularX = -vector.safeY
+        local perpendicularY = vector.safeX
+        local offset = 2.4
 
         local trail = vector.trail
         if trail and #trail > 1 then
@@ -768,7 +829,7 @@ function VectorLab:draw()
             end
         end
 
-        love.graphics.setLineWidth(1.35)
+        love.graphics.setLineWidth(1.25)
         love.graphics.setColor(0.12, 0.78, 1, 0.92)
         drawArrow(
             vector.x + perpendicularX * offset,
@@ -776,17 +837,29 @@ function VectorLab:draw()
             vector.referenceX, vector.referenceY, 22
         )
 
-        love.graphics.setColor(1, 0.58, 0.12, 0.98)
+        if vector.legacyDirectionValid then
+            love.graphics.setColor(1, 0.58, 0.12, 0.98)
+            drawArrow(
+                vector.x, vector.y,
+                vector.legacyX, vector.legacyY, 22
+            )
+        else
+            love.graphics.setColor(1, 0.3, 0.32, 1)
+            love.graphics.line(vector.x - 4, vector.y - 4, vector.x + 4, vector.y + 4)
+            love.graphics.line(vector.x - 4, vector.y + 4, vector.x + 4, vector.y - 4)
+        end
+
+        love.graphics.setColor(0.25, 0.95, 0.48, 0.98)
         drawArrow(
             vector.x - perpendicularX * offset,
             vector.y - perpendicularY * offset,
-            vector.actualX, vector.actualY, 22
+            vector.safeX, vector.safeY, 22
         )
     end
 
     local stats = self.stats
     local panelX, panelY = 230, 8
-    local panelWidth, panelHeight = 430, 94
+    local panelWidth, panelHeight = 520, 114
     love.graphics.setColor(0.015, 0.025, 0.045, 0.88)
     love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 5, 5)
     love.graphics.setColor(0.25, 0.62, 0.82, 0.95)
@@ -797,16 +870,24 @@ function VectorLab:draw()
     love.graphics.setColor(0.12, 0.78, 1, 1)
     love.graphics.print("CYAN: trig reference", panelX + 10, panelY + 27)
     love.graphics.setColor(1, 0.58, 0.12, 1)
-    love.graphics.print("ORANGE: normalized vector", panelX + 167, panelY + 27)
+    love.graphics.print("ORANGE: PR #8", panelX + 165, panelY + 27)
+    love.graphics.setColor(0.25, 0.95, 0.48, 1)
+    love.graphics.print("GREEN: scale-safe movement", panelX + 285, panelY + 27)
+    love.graphics.setColor(1, 0.68, 0.3, 1)
+    love.graphics.print(string.format(
+        "PR #8 mean Δangle=%.3e°  max=%.3e°",
+        stats.legacyAverageAngleError, stats.legacyMaxAngleError
+    ), panelX + 10, panelY + 47)
+    love.graphics.setColor(0.35, 1, 0.58, 1)
+    love.graphics.print(string.format(
+        "SAFE mean Δangle=%.3e°  max=%.3e°  norm max=%.3e",
+        stats.averageAngleError, stats.maxAngleError, stats.maxMagnitudeError
+    ), panelX + 10, panelY + 66)
     love.graphics.setColor(0.9, 0.94, 1, 1)
     love.graphics.print(string.format(
-        "n=%d  mean Δangle=%.8f°  max Δangle=%.8f°",
-        stats.count, stats.averageAngleError, stats.maxAngleError
-    ), panelX + 10, panelY + 47)
-    love.graphics.print(string.format(
-        "max |norm - 1|=%.3e  |  F6 = benchmark / auto-off",
-        stats.maxMagnitudeError
-    ), panelX + 10, panelY + 66)
+        "n=%d  legacy invalid=%d  legacy norm max=%.3e  |  F6 = benchmark / auto-off",
+        stats.count, stats.legacyInvalidCount, stats.legacyMaxMagnitudeError
+    ), panelX + 10, panelY + 85)
 
     love.graphics.pop()
 end

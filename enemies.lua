@@ -146,13 +146,23 @@ function Enemies:update(dt)
             if movementSpeed ~= 0 then
                 local directionX
                 local directionY
+                local componentScale = math.max(math.abs(dx), math.abs(dy))
 
-                if distanceSquared > 0 then
-                    local inverseDistance = 1 / math.sqrt(distanceSquared)
-                    directionX = dx * inverseDistance
-                    directionY = dy * inverseDistance
+                if componentScale > 0 and componentScale < math.huge then
+                    -- Scale before squaring: the components are now bounded
+                    -- by 1, so length calculation cannot overflow or underflow
+                    -- for finite, non-zero dx/dy values.
+                    local scaledX = dx / componentScale
+                    local scaledY = dy / componentScale
+                    local scaledLength = math.sqrt(
+                        scaledX * scaledX + scaledY * scaledY
+                    )
+                    directionX = scaledX / scaledLength
+                    directionY = scaledY / scaledLength
                 else
-                    -- Match the previous atan2(0, 0) + cos/sin fallback exactly.
+                    -- Preserve the previous atan2(0, 0) fallback for a true
+                    -- zero vector. Non-finite inputs also stay on this legacy
+                    -- fallback path rather than entering scale normalization.
                     local fallbackAngle = math.atan2(dy, dx)
                     directionX = math.cos(fallbackAngle)
                     directionY = math.sin(fallbackAngle)
