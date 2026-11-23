@@ -11,6 +11,7 @@ local Player = require("player")
 local Game = require("game")
 local UI = require("ui")
 local Benchmark = require("benchmark")
+local CircleBatch = require("circle_batch")
 
 local ctx = {
     config = Config,
@@ -57,6 +58,7 @@ end
 function love.load()
     love.window.setTitle("MeteorClad - Hack'n'Slash RPG (Modular v0.6)")
     love.window.setMode(Config.arena.width, Config.arena.height)
+    CircleBatch:init()
     loadInterfaceFont()
     math.randomseed(os.time())
     Game:reset()
