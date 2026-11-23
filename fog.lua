@@ -73,7 +73,7 @@ local function createFogTexture(seed)
 
             -- An elongated envelope keeps each cloud sheet-like rather than circular.
             local edgeVariation = (valueNoise(u, v, 4, seed + 6) - 0.5) * 0.16
-            local radiusX = (u - 0.5) * 1.72
+            local radiusX = (u - 0.5) * 2.25
             local radiusY = (v - 0.5) * 2.55
             local radius = math.sqrt(radiusX * radiusX + radiusY * radiusY)
             local edge = 1 - smoothstep(
