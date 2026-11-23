@@ -42,7 +42,7 @@ function Enemies:spawn(typeName, x, y, waveScale)
 end
 
 function Enemies:spawnWave(waveNum)
-    local arena = ctx.config.world
+    local world = ctx.config.world
     local count = 4 + waveNum * 2
     local waveScale = 1 + (waveNum - 1) * 0.15
 
