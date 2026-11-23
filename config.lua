@@ -1,7 +1,15 @@
 return {
-    arena = {
+    -- Screen-space dimensions remain fixed until the resize/scaling stage.
+    viewport = {
         width = 800,
-        height = 600,
+        height = 600
+    },
+    -- World-space bounds are larger than the visible viewport.
+    world = {
+        width = 1200,
+        height = 900
+    },
+    game = {
         waveDelay = 2.0
     },
     enemyTypes = {
