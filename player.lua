@@ -17,6 +17,7 @@ function Player:init()
     self.y = world.height / 2
     self.radius = 18
     self.facingAngle = 0
+    self.thrustVisual = 0
     self.speed = 220
     self.hp = 100
     self.maxHp = 100
@@ -108,6 +109,7 @@ function Player:dash()
     self.dashCooldownTimer = self.dashCooldown
     self.dashDirX, self.dashDirY = dx, dy
     self.facingAngle = math.atan2(dy, dx)
+    self.thrustVisual = 1
     self.dashTrail = {}
 end
 
@@ -163,6 +165,7 @@ function Player:update(dt)
     end
 
     if self.isDashing then
+        self.thrustVisual = math.min(1, self.thrustVisual + dt * 9)
         self.dashTimer = self.dashTimer - dt
         self.x = self.x + self.dashDirX * self.dashSpeed * dt
         self.y = self.y + self.dashDirY * self.dashSpeed * dt
@@ -188,8 +191,11 @@ function Player:update(dt)
         if dx ~= 0 or dy ~= 0 then
             local len = math.sqrt(dx * dx + dy * dy)
             self.facingAngle = math.atan2(dy, dx)
+            self.thrustVisual = math.min(1, self.thrustVisual + dt * 8)
             self.x = self.x + (dx / len) * self.speed * dt
             self.y = self.y + (dy / len) * self.speed * dt
+        else
+            self.thrustVisual = math.max(0, self.thrustVisual - dt * 5)
         end
     end
 
@@ -201,72 +207,186 @@ local function setStyleColor(color, alpha)
     love.graphics.setColor(color[1], color[2], color[3], alpha or 1)
 end
 
-local function drawPlayerGlyph(x, y, radius, angle, alpha)
+local function drawPlayerGlyph(x, y, radius, angle, alpha, thrust)
     local palette = Style.player
+    local material = Style.material
     local r = radius
     alpha = alpha or 1
+    thrust = math.max(0, math.min(1, thrust or 0))
 
     love.graphics.push()
     love.graphics.translate(x, y)
     love.graphics.rotate(angle or 0)
-    love.graphics.setLineWidth(math.max(1, r * 0.075))
 
-    -- A forward-pointing alloy shell, readable as a small top-down armored figure.
+    -- Twin vector engines and swept stabilizer wings sit behind the exosuit.
+    for side = -1, 1, 2 do
+        local sy = side * r * 0.34
+        setStyleColor(material.shadow, alpha)
+        love.graphics.polygon("fill",
+            -r * 0.88, sy - r * 0.17,
+            -r * 0.26, sy - r * 0.23,
+            r * 0.20, sy - r * 0.12,
+            r * 0.16, sy + r * 0.20,
+            -r * 0.62, sy + r * 0.22
+        )
+        setStyleColor(palette.armor, alpha)
+        love.graphics.polygon("fill",
+            -r * 0.72, sy - r * 0.13,
+            -r * 0.20, sy - r * 0.16,
+            r * 0.16, sy - r * 0.06,
+            r * 0.02, sy + r * 0.14,
+            -r * 0.64, sy + r * 0.15
+        )
+        setStyleColor(palette.armorEdge, alpha * 0.9)
+        love.graphics.polygon("line",
+            -r * 0.72, sy - r * 0.13,
+            -r * 0.20, sy - r * 0.16,
+            r * 0.16, sy - r * 0.06,
+            r * 0.02, sy + r * 0.14,
+            -r * 0.64, sy + r * 0.15
+        )
+
+        setStyleColor(material.hull, alpha)
+        love.graphics.circle("fill", -r * 0.76, sy, r * 0.16)
+        setStyleColor(material.seam, alpha * 0.85)
+        love.graphics.circle("line", -r * 0.76, sy, r * 0.16)
+        setStyleColor(palette.engine, alpha * (0.55 + thrust * 0.35))
+        love.graphics.circle("fill", -r * 0.80, sy, r * 0.075)
+        setStyleColor(material.engineCore, alpha * (0.52 + thrust * 0.48))
+        love.graphics.circle("fill", -r * 0.82, sy, r * 0.034)
+
+        if thrust > 0.04 then
+            local flameLength = r * (0.20 + thrust * 0.56)
+            setStyleColor(palette.engine, alpha * 0.50 * thrust)
+            love.graphics.polygon("fill",
+                -r * 0.88, sy - r * 0.07,
+                -r * 0.88 - flameLength, sy,
+                -r * 0.88, sy + r * 0.07
+            )
+            setStyleColor(material.engineCore, alpha * 0.64 * thrust)
+            love.graphics.line(
+                -r * 0.91, sy,
+                -r * 0.91 - flameLength * 0.66, sy
+            )
+        end
+    end
+
+    -- Broad shoulder wings provide an unmistakable aerial silhouette.
+    setStyleColor(material.hull, alpha)
+    love.graphics.polygon("fill",
+        -r * 0.48, -r * 0.40,
+        -r * 0.10, -r * 0.92,
+        r * 0.44, -r * 0.66,
+        r * 0.36, -r * 0.30,
+        -r * 0.18, -r * 0.16
+    )
+    love.graphics.polygon("fill",
+        -r * 0.48, r * 0.40,
+        -r * 0.10, r * 0.92,
+        r * 0.44, r * 0.66,
+        r * 0.36, r * 0.30,
+        -r * 0.18, r * 0.16
+    )
+    setStyleColor(palette.armorEdge, alpha)
+    love.graphics.polygon("line",
+        -r * 0.48, -r * 0.40,
+        -r * 0.10, -r * 0.92,
+        r * 0.44, -r * 0.66,
+        r * 0.36, -r * 0.30
+    )
+    love.graphics.polygon("line",
+        -r * 0.48, r * 0.40,
+        -r * 0.10, r * 0.92,
+        r * 0.44, r * 0.66,
+        r * 0.36, r * 0.30
+    )
+
+    -- Forearm weapon hardpoints: two short, forward-facing emitters.
+    for side = -1, 1, 2 do
+        local sy = side * r * 0.48
+        setStyleColor(material.shadow, alpha)
+        love.graphics.polygon("fill",
+            r * 0.12, sy - r * 0.105,
+            r * 0.63, sy - r * 0.075,
+            r * 0.80, sy,
+            r * 0.63, sy + r * 0.075,
+            r * 0.12, sy + r * 0.105
+        )
+        setStyleColor(palette.edge, alpha * 0.95)
+        love.graphics.line(r * 0.22, sy, r * 0.73, sy)
+        setStyleColor(palette.core, alpha)
+        love.graphics.circle("fill", r * 0.70, sy, r * 0.055)
+    end
+
+    -- Main armored fuselage.
     setStyleColor(palette.shell, alpha)
     love.graphics.polygon("fill",
-        r * 0.96, 0,
-        r * 0.30, -r * 0.70,
-        -r * 0.43, -r * 0.62,
-        -r * 0.84, -r * 0.28,
-        -r * 0.84, r * 0.28,
-        -r * 0.43, r * 0.62,
-        r * 0.30, r * 0.70
+        r * 1.12, 0,
+        r * 0.54, -r * 0.34,
+        r * 0.12, -r * 0.48,
+        -r * 0.60, -r * 0.39,
+        -r * 0.94, -r * 0.18,
+        -r * 0.94, r * 0.18,
+        -r * 0.60, r * 0.39,
+        r * 0.12, r * 0.48,
+        r * 0.54, r * 0.34
     )
     setStyleColor(palette.edge, alpha * 0.92)
     love.graphics.polygon("line",
-        r * 0.96, 0,
-        r * 0.30, -r * 0.70,
-        -r * 0.43, -r * 0.62,
-        -r * 0.84, -r * 0.28,
-        -r * 0.84, r * 0.28,
-        -r * 0.43, r * 0.62,
-        r * 0.30, r * 0.70
+        r * 1.12, 0,
+        r * 0.54, -r * 0.34,
+        r * 0.12, -r * 0.48,
+        -r * 0.60, -r * 0.39,
+        -r * 0.94, -r * 0.18,
+        -r * 0.94, r * 0.18,
+        -r * 0.60, r * 0.39,
+        r * 0.12, r * 0.48,
+        r * 0.54, r * 0.34
     )
 
-    -- Shoulder armor and the central chest plate create a humanoid read.
-    setStyleColor(palette.plate, alpha)
-    love.graphics.circle("fill", -r * 0.12, -r * 0.47, r * 0.22)
-    love.graphics.circle("fill", -r * 0.12, r * 0.47, r * 0.22)
-    setStyleColor(palette.bright, alpha * 0.8)
-    love.graphics.circle("line", -r * 0.12, -r * 0.47, r * 0.22)
-    love.graphics.circle("line", -r * 0.12, r * 0.47, r * 0.22)
-
-    setStyleColor(palette.plate, alpha)
+    -- Segmented chest plate, spine, cockpit visor and exposed reactor.
+    setStyleColor(palette.armor, alpha)
     love.graphics.polygon("fill",
-        r * 0.61, 0,
-        r * 0.16, -r * 0.34,
-        -r * 0.48, -r * 0.23,
-        -r * 0.48, r * 0.23,
-        r * 0.16, r * 0.34
+        r * 0.62, 0,
+        r * 0.22, -r * 0.25,
+        -r * 0.46, -r * 0.22,
+        -r * 0.62, 0,
+        -r * 0.46, r * 0.22,
+        r * 0.22, r * 0.25
     )
-    setStyleColor(palette.bright, alpha * 0.88)
+    setStyleColor(palette.armorEdge, alpha * 0.9)
     love.graphics.polygon("line",
-        r * 0.61, 0,
-        r * 0.16, -r * 0.34,
-        -r * 0.48, -r * 0.23,
-        -r * 0.48, r * 0.23,
-        r * 0.16, r * 0.34
+        r * 0.62, 0,
+        r * 0.22, -r * 0.25,
+        -r * 0.46, -r * 0.22,
+        -r * 0.62, 0,
+        -r * 0.46, r * 0.22,
+        r * 0.22, r * 0.25
     )
 
-    -- Rear vents, a luminous visor, and a small reactor core.
-    setStyleColor(palette.edge, alpha)
-    love.graphics.line(-r * 0.72, -r * 0.19, -r * 0.36, -r * 0.19)
-    love.graphics.line(-r * 0.72, r * 0.19, -r * 0.36, r * 0.19)
+    setStyleColor(material.seam, alpha * 0.9)
+    love.graphics.line(-r * 0.55, 0, r * 0.42, 0)
+    love.graphics.line(-r * 0.28, -r * 0.18, -r * 0.28, r * 0.18)
+    setStyleColor(palette.visor, alpha)
+    love.graphics.polygon("fill",
+        r * 0.82, -r * 0.10,
+        r * 0.98, 0,
+        r * 0.82, r * 0.10,
+        r * 0.57, r * 0.13,
+        r * 0.57, -r * 0.13
+    )
     setStyleColor(palette.core, alpha)
-    love.graphics.line(r * 0.49, -r * 0.20, r * 0.68, 0, r * 0.49, r * 0.20)
-    love.graphics.circle("fill", -r * 0.06, 0, math.max(1.5, r * 0.16))
-    setStyleColor(palette.bright, alpha * 0.9)
-    love.graphics.circle("line", -r * 0.06, 0, math.max(1.5, r * 0.22))
+    love.graphics.circle("fill", -r * 0.08, 0, r * 0.15)
+    setStyleColor(palette.bright, alpha)
+    love.graphics.circle("line", -r * 0.08, 0, r * 0.22)
+
+    -- Small panel seams and wing identification lights.
+    setStyleColor(palette.edge, alpha * 0.8)
+    love.graphics.line(-r * 0.32, -r * 0.30, r * 0.08, -r * 0.34)
+    love.graphics.line(-r * 0.32, r * 0.30, r * 0.08, r * 0.34)
+    setStyleColor(palette.core, alpha * 0.92)
+    love.graphics.circle("fill", -r * 0.13, -r * 0.72, r * 0.045)
+    love.graphics.circle("fill", -r * 0.13, r * 0.72, r * 0.045)
 
     love.graphics.pop()
 end
@@ -274,14 +394,14 @@ end
 function Player:draw()
     love.graphics.push("all")
 
-    -- Short, directional afterimages retain the armored silhouette.
     for _, sample in ipairs(self.dashTrail) do
         local fade = math.max(0, math.min(1, sample.life / DASH_TRAIL_LIFETIME))
         drawPlayerGlyph(
             sample.x, sample.y,
             self.radius * (0.84 + 0.10 * fade),
             sample.angle or self.facingAngle,
-            0.12 + 0.22 * fade
+            0.10 + 0.20 * fade,
+            0
         )
     end
 
@@ -296,12 +416,12 @@ function Player:draw()
         love.graphics.circle("line", self.x, self.y, ringRadius)
         love.graphics.circle("line", self.x, self.y, ringRadius * 0.84)
         for i = 0, 3 do
-            local angle = progress * 1.8 + i * math.pi * 0.5
+            local strikeAngle = progress * 1.8 + i * math.pi * 0.5
             love.graphics.line(
-                self.x + math.cos(angle) * ringRadius * 0.78,
-                self.y + math.sin(angle) * ringRadius * 0.78,
-                self.x + math.cos(angle) * ringRadius,
-                self.y + math.sin(angle) * ringRadius
+                self.x + math.cos(strikeAngle) * ringRadius * 0.78,
+                self.y + math.sin(strikeAngle) * ringRadius * 0.78,
+                self.x + math.cos(strikeAngle) * ringRadius,
+                self.y + math.sin(strikeAngle) * ringRadius
             )
         end
     end
@@ -320,7 +440,10 @@ function Player:draw()
         love.graphics.circle("line", self.x, self.y, self.radius + 5)
     end
     if self.isDashing then bodyAlpha = 0.94 end
-    drawPlayerGlyph(self.x, self.y, self.radius, self.facingAngle, bodyAlpha)
+    drawPlayerGlyph(
+        self.x, self.y, self.radius, self.facingAngle,
+        bodyAlpha, self.thrustVisual
+    )
 
     if self.isAttacking then
         local startAngle = self.attackAngle - self.attackArc
@@ -331,12 +454,12 @@ function Player:draw()
         love.graphics.setLineWidth(2.1)
         love.graphics.arc("line", self.x, self.y, self.attackRange, startAngle, endAngle)
         for offset = -1, 1 do
-            local angle = self.attackAngle + offset * self.attackArc * 0.72
+            local strikeAngle = self.attackAngle + offset * self.attackArc * 0.72
             love.graphics.line(
-                self.x + math.cos(angle) * self.attackRange * 0.60,
-                self.y + math.sin(angle) * self.attackRange * 0.60,
-                self.x + math.cos(angle) * self.attackRange,
-                self.y + math.sin(angle) * self.attackRange
+                self.x + math.cos(strikeAngle) * self.attackRange * 0.60,
+                self.y + math.sin(strikeAngle) * self.attackRange * 0.60,
+                self.x + math.cos(strikeAngle) * self.attackRange,
+                self.y + math.sin(strikeAngle) * self.attackRange
             )
         end
     end
