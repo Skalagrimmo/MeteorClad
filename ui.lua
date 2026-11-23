@@ -1,5 +1,6 @@
 -- ui.lua
 local UI = {}
+local Style = require("visual_style")
 
 local ctx
 
@@ -16,38 +17,38 @@ function UI:draw()
 
     -- HUD: HP
     local hpRatio = Utils.clamp(Player.hp / math.max(1, Player.maxHp), 0, 1)
-    love.graphics.setColor(0.2, 0.2, 0.2)
+    love.graphics.setColor(Style.ui.track)
     love.graphics.rectangle("fill", 15, 15, 200, 20)
-    love.graphics.setColor(0.2, 0.8, 0.3)
+    love.graphics.setColor(Style.ui.health)
     love.graphics.rectangle("fill", 15, 15, 200 * hpRatio, 20)
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(Style.ui.text)
     love.graphics.print("HP: " .. Player.hp .. "/" .. Player.maxHp, 22, 18)
 
     -- HUD: XP
     local xpRatio = Utils.clamp(Player.xp / math.max(1, Player.xpToNext), 0, 1)
-    love.graphics.setColor(0.2, 0.2, 0.2)
+    love.graphics.setColor(Style.ui.track)
     love.graphics.rectangle("fill", 15, 40, 200, 12)
-    love.graphics.setColor(0.6, 0.3, 1)
+    love.graphics.setColor(Style.ui.xp)
     love.graphics.rectangle("fill", 15, 40, 200 * xpRatio, 12)
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(Style.ui.text)
     love.graphics.print("Рівень " .. Player.level .. " (" .. Player.xp .. "/" .. Player.xpToNext .. ")", 222, 38)
 
     -- HUD: Dash (Space)
     local dashReady = Utils.clamp(1 - (Player.dashCooldownTimer / math.max(0.01, Player.dashCooldown)), 0, 1)
-    love.graphics.setColor(0.2, 0.2, 0.2)
+    love.graphics.setColor(Style.ui.track)
     love.graphics.rectangle("fill", 15, 58, 95, 8)
-    love.graphics.setColor(0.3, 0.7, 1)
+    love.graphics.setColor(Style.ui.dash)
     love.graphics.rectangle("fill", 15, 58, 95 * dashReady, 8)
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(Style.ui.text)
     love.graphics.print("Dash", 115, 55)
 
     -- HUD: Whirlwind (ПКМ)
     local whirlReady = Utils.clamp(1 - (Player.whirlwindTimer / math.max(0.01, Player.whirlwindCooldown)), 0, 1)
-    love.graphics.setColor(0.2, 0.2, 0.2)
+    love.graphics.setColor(Style.ui.track)
     love.graphics.rectangle("fill", 15, 72, 95, 8)
-    love.graphics.setColor(0.2, 0.95, 0.95)
+    love.graphics.setColor(Style.ui.whirlwind)
     love.graphics.rectangle("fill", 15, 72, 95 * whirlReady, 8)
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(Style.ui.text)
     love.graphics.print("Вихор (ПКМ)", 115, 69)
 
     -- HUD: Статистика
@@ -63,7 +64,7 @@ function UI:draw()
     if Game.state == "levelup" then
         love.graphics.setColor(0, 0, 0, 0.8)
         love.graphics.rectangle("fill", 0, 0, w, h)
-        love.graphics.setColor(1, 0.85, 0.2)
+        love.graphics.setColor(Style.ui.highlight)
         local levelUpTitle
         if Game.choiceType == "mastery" then
             levelUpTitle = "МАЙСТЕРНІСТЬ ВЕТЕРАНА (" .. Player.level .. ") — ОБЕРІТЬ ПОКРАЩЕННЯ:"
@@ -82,14 +83,14 @@ function UI:draw()
                 and (nextRank .. "/" .. choice.maxRank)
                 or (nextRank .. "/∞")
 
-            love.graphics.setColor(0.15, 0.18, 0.25)
+            love.graphics.setColor(Style.ui.panel)
             love.graphics.rectangle("fill", cardX, 200, 180, 220, 8, 8)
-            love.graphics.setColor(0.4, 0.6, 1)
+            love.graphics.setColor(Style.ui.panelEdge)
             love.graphics.rectangle("line", cardX, 200, 180, 220, 8, 8)
 
-            love.graphics.setColor(1, 0.85, 0.2)
+            love.graphics.setColor(Style.ui.highlight)
             love.graphics.printf("[" .. i .. "] " .. choice.name .. " (" .. rankLabel .. ")", cardX + 10, 220, 160, "center")
-            love.graphics.setColor(0.9, 0.9, 0.9)
+            love.graphics.setColor(Style.ui.text)
             love.graphics.printf(choice.desc, cardX + 15, 280, 150, "center")
         end
     end
@@ -98,9 +99,9 @@ function UI:draw()
     if Game.state == "gameover" then
         love.graphics.setColor(0, 0, 0, 0.75)
         love.graphics.rectangle("fill", 0, 0, w, h)
-        love.graphics.setColor(1, 0.2, 0.2)
+        love.graphics.setColor(Style.ui.danger)
         love.graphics.printf("ВИ ЗАГИНУЛИ", 0, 240, w, "center")
-        love.graphics.setColor(1, 1, 1)
+        love.graphics.setColor(Style.ui.text)
         love.graphics.printf("Рівень: " .. Player.level .. " | Хвиля: " .. Game.wave .. " | Очки: " .. Game.score, 0, 270, w, "center")
         love.graphics.printf("Натисніть [R] щоб почати знову", 0, 310, w, "center")
     end
