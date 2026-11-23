@@ -53,7 +53,7 @@ function Projectiles:update(dt)
     local Utils = ctx.utils
     local Player = ctx.player
     local Enemies = ctx.enemies
-    local arena = ctx.config.arena
+    local world = ctx.config.world
 
     for i = #self.list, 1, -1 do
         local p = self.list[i]
@@ -78,7 +78,7 @@ function Projectiles:update(dt)
             end
         end
 
-        if hit or p.x < -50 or p.x > arena.width + 50 or p.y < -50 or p.y > arena.height + 50 then
+        if hit or p.x < -50 or p.x > world.width + 50 or p.y < -50 or p.y > world.height + 50 then
             table.remove(self.list, i)
         end
     end

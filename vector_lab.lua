@@ -456,7 +456,7 @@ function VectorLab:runRadialTest(vectorCount)
         0.1, 1, 16, 250, 1e6, 1e12, 1e100,
         1e154, 1.34e154, 1.5e154, 1e155, 1e308
     }
-    local arena = self.ctx.config.arena
+    local arena = self.ctx.config.viewport
     local centerX = arena.width * 0.5
     local centerY = arena.height * 0.57
     local displayRadius = math.min(arena.width, arena.height) * 0.39
@@ -685,8 +685,8 @@ local function drawArrow(x, y, directionX, directionY, length)
 end
 
 function VectorLab:drawRadial()
-    local w = self.ctx.config.arena.width
-    local h = self.ctx.config.arena.height
+    local w = self.ctx.config.viewport.width
+    local h = self.ctx.config.viewport.height
 
     love.graphics.setColor(0.012, 0.02, 0.038, 0.97)
     love.graphics.rectangle("fill", 0, 0, w, h)
@@ -797,18 +797,10 @@ function VectorLab:drawRadial()
         )
     end
 end
-function VectorLab:draw()
-    if self.radialOpen then
-        love.graphics.push("all")
-        self:drawRadial()
-        love.graphics.pop()
-        return
-    end
-
-    if not self.active then return end
+function VectorLab:drawWorld()
+    if self.radialOpen or not self.active then return end
 
     love.graphics.push("all")
-
     local vectors = self.vectors
     local stride = math.max(1, math.ceil(#vectors / self.maxDrawVectors))
 
@@ -856,7 +848,20 @@ function VectorLab:draw()
             vector.safeX, vector.safeY, 22
         )
     end
+    love.graphics.pop()
+end
 
+function VectorLab:draw()
+    if self.radialOpen then
+        love.graphics.push("all")
+        self:drawRadial()
+        love.graphics.pop()
+        return
+    end
+
+    if not self.active then return end
+
+    love.graphics.push("all")
     local stats = self.stats
     local panelX, panelY = 230, 8
     local panelWidth, panelHeight = 520, 114
@@ -888,7 +893,6 @@ function VectorLab:draw()
         "n=%d  legacy invalid=%d  legacy norm max=%.3e  |  F6 = benchmark / auto-off",
         stats.count, stats.legacyInvalidCount, stats.legacyMaxMagnitudeError
     ), panelX + 10, panelY + 85)
-
     love.graphics.pop()
 end
 

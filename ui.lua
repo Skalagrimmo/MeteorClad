@@ -11,8 +11,8 @@ function UI:draw()
     local Player = ctx.player
     local Game = ctx.game
     local Utils = ctx.utils
-    local w = ctx.config.arena.width
-    local h = ctx.config.arena.height
+    local w = ctx.config.viewport.width
+    local h = ctx.config.viewport.height
 
     -- HUD: HP
     local hpRatio = Utils.clamp(Player.hp / math.max(1, Player.maxHp), 0, 1)
@@ -56,7 +56,7 @@ function UI:draw()
     love.graphics.print("Шкода: " .. Player.damage, w - 100, 55)
 
     if #ctx.enemies.list == 0 and Game.state == "playing" then
-        love.graphics.printf("Наступна хвиля через " .. string.format("%.1f", ctx.config.arena.waveDelay - Game.waveTimer) .. " с...", 0, 90, w, "center")
+        love.graphics.printf("Наступна хвиля через " .. string.format("%.1f", ctx.config.game.waveDelay - Game.waveTimer) .. " с...", 0, 90, w, "center")
     end
 
     -- Екран Level Up

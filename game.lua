@@ -23,6 +23,7 @@ function Game:reset()
     self.choiceType = nil
 
     ctx.player:init()
+    if ctx.camera then ctx.camera:reset() end
     ctx.enemies:clear()
     ctx.projectiles:clear()
     ctx.loot:clear()
@@ -131,7 +132,7 @@ function Game:update(dt)
 
     if #ctx.enemies.list == 0 then
         self.waveTimer = self.waveTimer + dt
-        if self.waveTimer >= ctx.config.arena.waveDelay then
+        if self.waveTimer >= ctx.config.game.waveDelay then
             self.wave = self.wave + 1
             self.waveTimer = 0
             ctx.enemies:spawnWave(self.wave)

@@ -458,8 +458,8 @@ function Benchmark:isAndroid()
 end
 
 function Benchmark:isMobileLauncherHit(x, y)
-    local w = ctx.config.arena.width
-    local h = ctx.config.arena.height
+    local w = ctx.config.viewport.width
+    local h = ctx.config.viewport.height
     return x >= w - 112 and x <= w - 12
         and y >= h - 54 and y <= h - 10
 end
@@ -485,8 +485,8 @@ function Benchmark:touchpressed(x, y)
         return false
     end
 
-    local w = ctx.config.arena.width
-    local h = ctx.config.arena.height
+    local w = ctx.config.viewport.width
+    local h = ctx.config.viewport.height
     local panelX, panelY = 20, 20
     local panelW, panelH = w - 40, h - 40
 
@@ -598,7 +598,7 @@ function Benchmark:prepareWorld()
     ctx.loot:clear()
 
     local player = ctx.player
-    local arena = ctx.config.arena
+    local arena = ctx.config.world
     player.x = arena.width / 2
     player.y = arena.height / 2
     player.invulnTimer = 999999
@@ -608,7 +608,7 @@ function Benchmark:prepareWorld()
 end
 
 function Benchmark:spawnMixedEnemies(count)
-    local arena = ctx.config.arena
+    local arena = ctx.config.world
     local columns = math.max(1, math.ceil(math.sqrt(count * arena.width / arena.height)))
     local rows = math.ceil(count / columns)
 
@@ -640,7 +640,7 @@ function Benchmark:spawnMixedEnemies(count)
 end
 
 function Benchmark:spawnOneProjectile()
-    local arena = ctx.config.arena
+    local arena = ctx.config.world
     local index = self.projectileSpawnIndex
     self.projectileSpawnIndex = index + 1
 
@@ -674,7 +674,7 @@ function Benchmark:topUpProjectiles()
 end
 
 function Benchmark:spawnXPOrbs(count)
-    local arena = ctx.config.arena
+    local arena = ctx.config.world
     local centerX = arena.width / 2
     local centerY = arena.height / 2
     local goldenAngle = 2.399963229728653
@@ -877,8 +877,8 @@ end
 function Benchmark:draw()
     if not self.open then return end
 
-    local w = ctx.config.arena.width
-    local h = ctx.config.arena.height
+    local w = ctx.config.viewport.width
+    local h = ctx.config.viewport.height
     local mobile = self:isAndroid()
     local panelX, panelY = mobile and 20 or 90, mobile and 20 or 92
     local panelW, panelH = mobile and (w - 40) or (w - 180), mobile and (h - 40) or 452
