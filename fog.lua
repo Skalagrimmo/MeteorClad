@@ -82,11 +82,11 @@ local function createFogTexture(seed)
                 radius
             )
 
-            local density = smoothstep(0.39, 0.69, cloudNoise)
+            local density = smoothstep(0.27, 0.62, cloudNoise)
             local strands = 0.82 + 0.18 * math.sin(
                 (u * 4.7 + v * 1.8 + cloudNoise * 1.4) * math.pi
             )
-            local alpha = (density * edge) ^ 1.35 * 0.72 * strands
+            local alpha = (density * edge) ^ 1.1 * 0.86 * strands
             imageData:setPixel(x, y, 1, 1, 1, clamp(alpha, 0, 0.72))
         end
     end
@@ -128,7 +128,12 @@ function Fog:init()
         self.textures[#self.textures + 1] = textureOrError
     end
 
-    local patchCount = math.max(0, math.min(64, math.floor(settings.patchCount or 28)))
+    local patchCount = math.max(0, math.min(64, math.floor(settings.patchCount or 30)))
+    local gridColumns = 6
+    local gridRows = math.max(1, math.ceil(patchCount / gridColumns))
+    local cellWidth = world.width / gridColumns
+    local cellHeight = world.height / gridRows
+
     for i = 1, patchCount do
         local random = self:nextRandom()
         local farLayer = random < 0.42
@@ -138,22 +143,27 @@ function Fog:init()
         local driftSpeed
 
         if farLayer then
-            width = 560 + self:nextRandom() * 360
-            height = 210 + self:nextRandom() * 170
-            opacity = 0.13 + self:nextRandom() * 0.08
+            width = 520 + self:nextRandom() * 380
+            height = 190 + self:nextRandom() * 170
+            opacity = 0.20 + self:nextRandom() * 0.11
             driftSpeed = 1.5 + self:nextRandom() * 3.0
         else
-            width = 340 + self:nextRandom() * 330
-            height = 125 + self:nextRandom() * 145
-            opacity = 0.16 + self:nextRandom() * 0.10
+            width = 340 + self:nextRandom() * 340
+            height = 130 + self:nextRandom() * 160
+            opacity = 0.24 + self:nextRandom() * 0.13
             driftSpeed = 3.5 + self:nextRandom() * 5.5
         end
 
         local direction = self:nextRandom() < 0.5 and -1 or 1
         local variation = self:nextRandom()
+        local column = (i - 1) % gridColumns
+        local row = math.floor((i - 1) / gridColumns)
+        local x = (column + 0.5 + (self:nextRandom() - 0.5) * 0.56) * cellWidth
+        local y = (row + 0.5 + (self:nextRandom() - 0.5) * 0.50) * cellHeight
+
         self.patches[#self.patches + 1] = {
-            x = self:nextRandom() * world.width,
-            y = self:nextRandom() * world.height,
+            x = x,
+            y = y,
             width = width,
             height = height,
             textureIndex = math.floor(self:nextRandom() * #self.textures) + 1,
@@ -171,7 +181,7 @@ function Fog:init()
         }
     end
 
-    local moteCount = math.max(0, math.min(80, math.floor(settings.moteCount or 26)))
+    local moteCount = math.max(0, math.min(80, math.floor(settings.moteCount or 24)))
     for i = 1, moteCount do
         self.motes[#self.motes + 1] = {
             x = self:nextRandom() * world.width,
@@ -179,7 +189,7 @@ function Fog:init()
             vx = (self:nextRandom() - 0.5) * 2.6,
             vy = (self:nextRandom() - 0.5) * 1.8,
             radius = 0.65 + self:nextRandom() * 0.75,
-            alpha = 0.07 + self:nextRandom() * 0.07,
+            alpha = 0.08 + self:nextRandom() * 0.07,
             phase = self:nextRandom() * math.pi * 2
         }
     end
