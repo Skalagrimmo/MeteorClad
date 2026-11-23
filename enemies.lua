@@ -43,16 +43,79 @@ end
 
 function Enemies:spawnWave(waveNum)
     local world = ctx.config.world
+    local viewport = ctx.config.viewport
+    local player = ctx.player
+    local camera = ctx.camera
+    local spawnMargin = ctx.config.game.enemySpawnMargin or 80
+    local edgePadding = 32
+
+    -- Use the player's current camera bounds, including movement earlier in this frame.
+    if camera then camera:reset() end
+
+    local viewLeft = camera and camera.x
+        or math.max(0, math.min(world.width - viewport.width, player.x - viewport.width * 0.5))
+    local viewTop = camera and camera.y
+        or math.max(0, math.min(world.height - viewport.height, player.y - viewport.height * 0.5))
+    local viewRight = viewLeft + viewport.width
+    local viewBottom = viewTop + viewport.height
+
+    local function randomOnViewSpan(minimum, maximum, worldMaximum)
+        local low = math.max(edgePadding, math.ceil(minimum))
+        local high = math.min(worldMaximum - edgePadding, math.floor(maximum))
+
+        if low > high then
+            return math.max(edgePadding, math.min(worldMaximum - edgePadding, (minimum + maximum) * 0.5))
+        end
+
+        return math.random(low, high)
+    end
+
+    -- Only use sides where the spawn margin still fits inside the world.
+    -- This prevents enemies from appearing inside the viewport near world edges.
+    local spawnSides = {}
+    if viewTop - spawnMargin >= edgePadding then
+        table.insert(spawnSides, { side = "top", fixed = viewTop - spawnMargin })
+    end
+    if viewBottom + spawnMargin <= world.height - edgePadding then
+        table.insert(spawnSides, { side = "bottom", fixed = viewBottom + spawnMargin })
+    end
+    if viewLeft - spawnMargin >= edgePadding then
+        table.insert(spawnSides, { side = "left", fixed = viewLeft - spawnMargin })
+    end
+    if viewRight + spawnMargin <= world.width - edgePadding then
+        table.insert(spawnSides, { side = "right", fixed = viewRight + spawnMargin })
+    end
+
+    local function chooseSpawnPosition()
+        if #spawnSides == 0 then
+            -- Degenerate fallback for worlds too small to fit an off-screen margin.
+            local side = math.random(1, 4)
+            if side == 1 then
+                return randomOnViewSpan(0, world.width, world.width), edgePadding
+            elseif side == 2 then
+                return randomOnViewSpan(0, world.width, world.width), world.height - edgePadding
+            elseif side == 3 then
+                return edgePadding, randomOnViewSpan(0, world.height, world.height)
+            end
+            return world.width - edgePadding, randomOnViewSpan(0, world.height, world.height)
+        end
+
+        local spawnSide = spawnSides[math.random(1, #spawnSides)]
+        if spawnSide.side == "top" then
+            return randomOnViewSpan(viewLeft, viewRight, world.width), spawnSide.fixed
+        elseif spawnSide.side == "bottom" then
+            return randomOnViewSpan(viewLeft, viewRight, world.width), spawnSide.fixed
+        elseif spawnSide.side == "left" then
+            return spawnSide.fixed, randomOnViewSpan(viewTop, viewBottom, world.height)
+        end
+        return spawnSide.fixed, randomOnViewSpan(viewTop, viewBottom, world.height)
+    end
+
     local count = 4 + waveNum * 2
     local waveScale = 1 + (waveNum - 1) * 0.15
 
     for i = 1, count do
-        local side = math.random(1, 4)
-        local x, y
-        if side == 1 then x, y = math.random(0, world.width), -25
-        elseif side == 2 then x, y = math.random(0, world.width), world.height + 25
-        elseif side == 3 then x, y = -25, math.random(0, world.height)
-        else x, y = world.width + 25, math.random(0, world.height) end
+        local x, y = chooseSpawnPosition()
 
         local roll = math.random(1, 100)
         local chosenType = "grunt"
