@@ -13,6 +13,7 @@ local UI = require("ui")
 local Benchmark = require("benchmark")
 local VectorLab = require("vector_lab")
 local CircleBatch = require("circle_batch")
+local Camera = require("camera")
 
 local ctx = {
     config = Config,
@@ -26,7 +27,8 @@ local ctx = {
     game = Game,
     ui = UI,
     benchmark = Benchmark,
-    vectorLab = VectorLab
+    vectorLab = VectorLab,
+    camera = Camera
 }
 
 Loot:bind(ctx)
@@ -37,6 +39,7 @@ Game:bind(ctx)
 UI:bind(ctx)
 Benchmark:bind(ctx)
 VectorLab:bind(ctx)
+Camera:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -60,7 +63,7 @@ end
 
 function love.load()
     love.window.setTitle("MeteorClad - Hack'n'Slash RPG (Modular v0.6)")
-    love.window.setMode(Config.arena.width, Config.arena.height)
+    love.window.setMode(Config.viewport.width, Config.viewport.height)
     CircleBatch:init()
     loadInterfaceFont()
     math.randomseed(os.time())
@@ -75,6 +78,7 @@ function love.update(dt)
         return
     else
         Game:update(dt)
+        Camera:update(dt)
     end
 end
 
@@ -97,6 +101,9 @@ end
 function love.mousepressed(x, y, button, istouch)
     if Benchmark.open or VectorLab.radialOpen then return end
     if istouch and Benchmark:isMobileLauncherHit(x, y) then return end
+    if Game.state == "playing" then
+        x, y = Camera:screenToWorld(x, y)
+    end
     Game:mousepressed(x, y, button)
 end
 
@@ -130,26 +137,39 @@ function love.draw()
     local profiling = Benchmark:isCollectingProfile()
     local startedAt = profiling and love.timer.getTime() or nil
 
+    -- World-space entities share one camera transform.
+    love.graphics.push("all")
+    Camera:apply()
     drawProfiled("loot_draw_cpu", Loot, profiling)
     drawProfiled("player_draw_cpu", Player, profiling)
     drawProfiled("enemies_draw_cpu", Enemies, profiling)
     drawProfiled("projectiles_draw_cpu", Projectiles, profiling)
+    love.graphics.pop()
+
+    -- HUD, modal screens and benchmark UI remain in viewport coordinates.
     drawProfiled("ui_draw_cpu", UI, profiling)
     drawProfiled("benchmark_draw_cpu", Benchmark, profiling)
-    VectorLab:draw()
 
     if profiling then
         Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
     end
 
+    -- F7 arrows and trails follow the world; its statistics panel stays fixed.
+    love.graphics.push("all")
+    Camera:apply()
+    VectorLab:drawWorld()
+    love.graphics.pop()
+    VectorLab:draw()
+
     if Benchmark:isAndroid() and not Benchmark.open then
+        local viewport = Config.viewport
         love.graphics.push("all")
         love.graphics.setColor(0.12, 0.19, 0.29, 0.9)
-        love.graphics.rectangle("fill", Config.arena.width - 112, Config.arena.height - 54, 100, 44, 7, 7)
+        love.graphics.rectangle("fill", viewport.width - 112, viewport.height - 54, 100, 44, 7, 7)
         love.graphics.setColor(0.45, 0.72, 1, 1)
-        love.graphics.rectangle("line", Config.arena.width - 112, Config.arena.height - 54, 100, 44, 7, 7)
+        love.graphics.rectangle("line", viewport.width - 112, viewport.height - 54, 100, 44, 7, 7)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("TEST", Config.arena.width - 108, Config.arena.height - 40, 92, "center")
+        love.graphics.printf("TEST", viewport.width - 108, viewport.height - 40, 92, "center")
         love.graphics.pop()
     end
 end
