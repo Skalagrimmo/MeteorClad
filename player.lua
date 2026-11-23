@@ -1,6 +1,9 @@
 -- player.lua
 local Player = {}
 
+local DASH_TRAIL_LIFETIME = 0.12
+local DASH_TRAIL_MAX_SAMPLES = 5
+
 local ctx
 
 function Player:bind(gameCtx)
@@ -55,6 +58,7 @@ function Player:init()
     self.dashCooldown = 1.0
     self.dashCooldownTimer = 0
     self.dashDirX, self.dashDirY = 0, 0
+    self.dashTrail = {}
 end
 
 function Player:scaleCooldown(fieldCooldown, fieldTimer, factor)
@@ -101,6 +105,7 @@ function Player:dash()
     self.dashTimer = self.dashDuration
     self.dashCooldownTimer = self.dashCooldown
     self.dashDirX, self.dashDirY = dx, dy
+    self.dashTrail = {}
 end
 
 function Player:attack(targetX, targetY)
@@ -134,6 +139,15 @@ function Player:update(dt)
     if self.whirlwindTimer > 0 then self.whirlwindTimer = math.max(0, self.whirlwindTimer - dt) end
     if self.dashCooldownTimer > 0 then self.dashCooldownTimer = math.max(0, self.dashCooldownTimer - dt) end
 
+    -- Let the short afterimages fade independently after the dash ends.
+    for i = #self.dashTrail, 1, -1 do
+        local sample = self.dashTrail[i]
+        sample.life = sample.life - dt
+        if sample.life <= 0 then
+            table.remove(self.dashTrail, i)
+        end
+    end
+
     if self.isAttacking then
         self.attackAnimTimer = self.attackAnimTimer - dt
         if self.attackAnimTimer <= 0 then self.isAttacking = false end
@@ -148,6 +162,16 @@ function Player:update(dt)
         self.dashTimer = self.dashTimer - dt
         self.x = self.x + self.dashDirX * self.dashSpeed * dt
         self.y = self.y + self.dashDirY * self.dashSpeed * dt
+
+        table.insert(self.dashTrail, {
+            x = self.x,
+            y = self.y,
+            life = DASH_TRAIL_LIFETIME
+        })
+        if #self.dashTrail > DASH_TRAIL_MAX_SAMPLES then
+            table.remove(self.dashTrail, 1)
+        end
+
         if self.dashTimer <= 0 then self.isDashing = false end
     else
         local dx, dy = 0, 0
@@ -168,6 +192,17 @@ function Player:update(dt)
 end
 
 function Player:draw()
+    -- Dash afterimages are world-space and disappear quickly after movement stops.
+    for _, sample in ipairs(self.dashTrail) do
+        local fade = math.max(0, math.min(1, sample.life / DASH_TRAIL_LIFETIME))
+        local sampleRadius = self.radius * (0.62 + 0.18 * fade)
+
+        love.graphics.setColor(0.1, 0.58, 1, 0.12 * fade)
+        love.graphics.circle("fill", sample.x, sample.y, sampleRadius)
+        love.graphics.setColor(0.42, 0.82, 1, 0.22 * fade)
+        love.graphics.circle("line", sample.x, sample.y, sampleRadius)
+    end
+
     if self.isWhirlwinding then
         local progress = 1 - (self.whirlwindAnimTimer / self.whirlwindDuration)
         love.graphics.setColor(0.3, 0.85, 1, 0.35 * (1 - progress))
@@ -176,8 +211,15 @@ function Player:draw()
         love.graphics.circle("line", self.x, self.y, self.whirlwindRange * (0.6 + 0.4 * progress))
     end
 
+    -- A restrained cyan envelope makes the player legible without adding scenery.
+    local haloAlpha = self.isDashing and 0.24 or 0.11
+    love.graphics.setColor(0.08, 0.42, 0.9, haloAlpha)
+    love.graphics.circle("fill", self.x, self.y, self.radius + (self.isDashing and 8 or 5))
+    love.graphics.setColor(0.28, 0.72, 1, self.isDashing and 0.72 or 0.34)
+    love.graphics.circle("line", self.x, self.y, self.radius + (self.isDashing and 4 or 2))
+
     if self.isDashing then
-        love.graphics.setColor(0.4, 0.8, 1, 0.5)
+        love.graphics.setColor(0.4, 0.8, 1, 0.62)
     elseif self.invulnTimer > 0 and math.floor(self.invulnTimer * 20) % 2 == 0 then
         love.graphics.setColor(1, 0.3, 0.3, 0.7)
     else

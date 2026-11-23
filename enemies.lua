@@ -1,6 +1,8 @@
 -- enemies.lua
 local CircleBatch = require("circle_batch")
 
+local HIT_PULSE_LIFETIME = 0.14
+
 local Enemies = {
     list = {}
 }
@@ -37,7 +39,8 @@ function Enemies:spawn(typeName, x, y, waveScale)
         preferredDist = proto.preferredDist or 0,
         shootCooldown = proto.shootCooldown or 0,
         shootTimer = math.random() * 1.5,
-        hitFlash = 0
+        hitFlash = 0,
+        hitPulse = 0
     })
 end
 
@@ -135,6 +138,7 @@ function Enemies:checkMeleeHit(px, py, range, attackAngle, attackArc, damage, ba
             if attackArc >= math.pi or math.abs(Utils.normalizeAngle(angleToEnemy - attackAngle)) <= attackArc then
                 e.hp = e.hp - damage
                 e.hitFlash = 0.1
+                e.hitPulse = HIT_PULSE_LIFETIME
                 local pushAngle = (attackArc >= math.pi) and angleToEnemy or attackAngle
                 local knockback = (baseKnockback or 32) * e.knockbackResist
                 e.x = e.x + math.cos(pushAngle) * knockback
@@ -150,6 +154,7 @@ function Enemies:damageArea(cx, cy, radius, damage)
         if e.hp > 0 and Utils.dist(cx, cy, e.x, e.y) <= radius + e.radius then
             e.hp = e.hp - damage
             e.hitFlash = 0.12
+            e.hitPulse = HIT_PULSE_LIFETIME
         end
     end
 end
@@ -183,6 +188,9 @@ function Enemies:update(dt)
             self:kill(i)
         else
             if e.hitFlash > 0 then e.hitFlash = e.hitFlash - dt end
+            if e.hitPulse > 0 then
+                e.hitPulse = math.max(0, e.hitPulse - dt)
+            end
 
             local dx = Player.x - e.x
             local dy = Player.y - e.y
@@ -313,6 +321,13 @@ function Enemies:draw()
     -- Fallback preserves the original body/HP-bar draw order for damaged
     -- enemies, avoiding changes to how overlapping bars and bodies compose.
     for _, e in ipairs(self.list) do
+        if e.hitPulse > 0 then
+            local progress = 1 - e.hitPulse / HIT_PULSE_LIFETIME
+            local alpha = 0.5 * (1 - progress)
+            love.graphics.setColor(1, 0.78, 0.42, alpha)
+            love.graphics.circle("line", e.x, e.y, e.radius + 3 + progress * 12)
+        end
+
         if e.hitFlash > 0 then
             love.graphics.setColor(1, 1, 1)
         else
