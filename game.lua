@@ -91,21 +91,41 @@ end
 function Game:update(dt)
     if self.state ~= "playing" then return end
 
+    local profiler = ctx.benchmark
+    local profiling = profiler and profiler:isCollectingProfile()
+    local startedAt
+
+    if profiling then startedAt = love.timer.getTime() end
     ctx.player:update(dt)
+    if profiling then
+        profiler:recordProfile("player_update", love.timer.getTime() - startedAt)
+    end
     if self.state ~= "playing" then return end
 
+    if profiling then startedAt = love.timer.getTime() end
     ctx.enemies:update(dt)
+    if profiling then
+        profiler:recordProfile("enemies_update", love.timer.getTime() - startedAt)
+    end
     -- Enemy contact damage can end the run. Do not continue into projectile
     -- or loot updates after Game Over.
     if self.state ~= "playing" then return end
 
+    if profiling then startedAt = love.timer.getTime() end
     ctx.projectiles:update(dt)
+    if profiling then
+        profiler:recordProfile("projectiles_update", love.timer.getTime() - startedAt)
+    end
     -- A projectile can deal the lethal hit. In particular, do not let an XP
     -- pickup later in this same frame replace the "gameover" state with
     -- "levelup".
     if self.state ~= "playing" then return end
 
+    if profiling then startedAt = love.timer.getTime() end
     ctx.loot:update(dt)
+    if profiling then
+        profiler:recordProfile("loot_update", love.timer.getTime() - startedAt)
+    end
     -- Loot collection can trigger a level-up screen and pause the run.
     if self.state ~= "playing" then return end
 
