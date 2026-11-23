@@ -339,8 +339,8 @@ local function drawPlayerGlyph(x, y, radius, angle, alpha, thrust)
         -r * 0.60, -r * 0.39,
         -r * 0.94, -r * 0.18,
         -r * 0.94, r * 0.18,
-        r * 0.12, r * 0.48,
         -r * 0.60, r * 0.39,
+        r * 0.12, r * 0.48,
         r * 0.54, r * 0.34
     )
 
