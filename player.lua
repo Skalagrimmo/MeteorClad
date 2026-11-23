@@ -300,8 +300,8 @@ function Player:draw()
             love.graphics.line(
                 self.x + math.cos(angle) * ringRadius * 0.78,
                 self.y + math.sin(angle) * ringRadius * 0.78,
-                self.x + math.cos(angle) * ringRadius
-                    , self.y + math.sin(angle) * ringRadius
+                self.x + math.cos(angle) * ringRadius,
+                self.y + math.sin(angle) * ringRadius
             )
         end
     end
