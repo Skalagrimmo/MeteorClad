@@ -19,6 +19,14 @@ return {
         -- Keep incoming waves just beyond the camera view as the world grows.
         enemySpawnMargin = 80
     },
+    -- Ambient atmosphere is a world-space layer behind all gameplay entities.
+    ambientFog = {
+        enabled = true,
+        patchCount = 28,
+        moteCount = 26,
+        opacity = 1.0,
+        moteOpacity = 0.75
+    },
     enemyTypes = {
         grunt = {
             color = {0.9, 0.25, 0.25},
