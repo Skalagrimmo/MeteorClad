@@ -159,6 +159,24 @@ LÖVE callback `love.resize(w, h)` оновлює розрахунок розм�
 
 No obstacle geometry, wall collision, or gameplay rebalance is included in this stage.
 
+### Stage D.3 — expanded void and viewport-relative wave spawning
+
+- World bounds are now **2400×1800** (three logical viewports in each dimension). The visual field remains deliberately empty and black; no stars, scenery, walls or decorative objects are added.
+- Wave enemies spawn **80 logical pixels beyond the current camera viewport**, rather than at the distant outer world border. This keeps wave arrival pacing close to the previous build while giving the player a much larger area to move through.
+- Spawn sides are selected only when the requested margin fits inside the world. As the camera approaches a world edge, unavailable sides are removed from the candidate list; enemies continue arriving from the remaining off-screen directions.
+- Wave count, enemy composition, scaling, movement speed and combat values are unchanged.
+- A fallback to the inner world perimeter exists only for custom world configurations too small to fit any off-screen spawn margin; it is not expected to be used by the current 2400×1800 world.
+
+### Ручна перевірка Stage D.3
+
+1. Запустити новий забіг і перевірити, що перша хвиля з'являється за межами видимого прямокутника, а вороги входять у кадр із різних напрямків.
+2. Рухатися вліво, вправо, вгору й униз: камера має проходити більший простір, а вороги — не з'являтися всередині видимої області.
+3. Наблизитися до країв світу: напрямки, де вже немає місця для spawn margin, мають зникати з вибору; доступні сторони продовжують працювати.
+4. Очистити хвилю й дочекатися наступної: затримка хвилі, кількість і склад ворогів мають лишитися такими самими.
+5. Змінити розмір desktop-вікна й повторити появу ворогів: логіка має орієнтуватися на незмінний логічний viewport 800×600, а не фізичні пікселі вікна.
+
+Цей етап не запускався в LÖVE автоматично; runtime-перевірку потрібно виконати у Windows/LÖVE 11.5.
+
 ## Статус
 
 Поточна гілка розробки: модульна кодова база v0.6. Зміни перевіряються окремими етапами; запуск і продуктивність необхідно підтверджувати тестуванням у LÖVE2D.
