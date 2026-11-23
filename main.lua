@@ -14,6 +14,7 @@ local Benchmark = require("benchmark")
 local VectorLab = require("vector_lab")
 local CircleBatch = require("circle_batch")
 local Camera = require("camera")
+local Viewport = require("viewport")
 
 local ctx = {
     config = Config,
@@ -28,7 +29,8 @@ local ctx = {
     ui = UI,
     benchmark = Benchmark,
     vectorLab = VectorLab,
-    camera = Camera
+    camera = Camera,
+    viewport = Viewport
 }
 
 Loot:bind(ctx)
@@ -40,6 +42,7 @@ UI:bind(ctx)
 Benchmark:bind(ctx)
 VectorLab:bind(ctx)
 Camera:bind(ctx)
+Viewport:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -63,7 +66,17 @@ end
 
 function love.load()
     love.window.setTitle("MeteorClad - Hack'n'Slash RPG (Modular v0.6)")
-    love.window.setMode(Config.viewport.width, Config.viewport.height)
+    local window = Config.window
+    if love.system.getOS() == "Android" then
+        love.window.setMode(Config.viewport.width, Config.viewport.height)
+    else
+        love.window.setMode(Config.viewport.width, Config.viewport.height, {
+            resizable = window.resizableDesktop,
+            minwidth = window.minWidth,
+            minheight = window.minHeight
+        })
+    end
+    Viewport:update()
     CircleBatch:init()
     loadInterfaceFont()
     math.randomseed(os.time())
@@ -100,7 +113,12 @@ end
 
 function love.mousepressed(x, y, button, istouch)
     if Benchmark.open or VectorLab.radialOpen then return end
+
+    local insideViewport
+    x, y, insideViewport = Viewport:screenToViewport(x, y)
+    if not insideViewport then return end
     if istouch and Benchmark:isMobileLauncherHit(x, y) then return end
+
     if Game.state == "playing" then
         x, y = Camera:screenToWorld(x, y)
     end
@@ -109,6 +127,10 @@ end
 
 function love.touchpressed(id, x, y, dx, dy, pressure)
     if VectorLab.radialOpen then return end
+    local insideViewport
+    x, y, insideViewport = Viewport:screenToViewport(x, y)
+    if not insideViewport then return end
+
     if Benchmark:touchpressed(x, y) then
         -- The Android TEST launcher can open F6 without a keyboard event.
         if Benchmark.open and VectorLab.active then
@@ -116,6 +138,11 @@ function love.touchpressed(id, x, y, dx, dy, pressure)
         end
         return
     end
+end
+
+function love.resize(w, h)
+    -- Query graphics dimensions as the authoritative DPI-scaled viewport size.
+    Viewport:update(w, h)
 end
 
 local function drawProfiled(sectionName, system, profiling)
@@ -129,16 +156,22 @@ local function drawProfiled(sectionName, system, profiling)
 end
 
 function love.draw()
+    love.graphics.clear(0.012, 0.02, 0.038, 1)
+
     if VectorLab.radialOpen then
+        love.graphics.push("all")
+        Viewport:apply()
         VectorLab:draw()
+        love.graphics.pop()
         return
     end
 
     local profiling = Benchmark:isCollectingProfile()
     local startedAt = profiling and love.timer.getTime() or nil
 
-    -- World-space entities share one camera transform.
+    -- World-space entities share viewport scaling and the camera transform.
     love.graphics.push("all")
+    Viewport:apply()
     Camera:apply()
     drawProfiled("loot_draw_cpu", Loot, profiling)
     drawProfiled("player_draw_cpu", Player, profiling)
@@ -146,7 +179,9 @@ function love.draw()
     drawProfiled("projectiles_draw_cpu", Projectiles, profiling)
     love.graphics.pop()
 
-    -- HUD, modal screens and benchmark UI remain in viewport coordinates.
+    -- HUD and diagnostics use the same logical viewport, but not the camera.
+    love.graphics.push("all")
+    Viewport:apply()
     drawProfiled("ui_draw_cpu", UI, profiling)
     drawProfiled("benchmark_draw_cpu", Benchmark, profiling)
 
@@ -154,22 +189,23 @@ function love.draw()
         Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
     end
 
-    -- F7 arrows and trails follow the world; its statistics panel stays fixed.
-    love.graphics.push("all")
-    Camera:apply()
-    VectorLab:drawWorld()
-    love.graphics.pop()
     VectorLab:draw()
 
     if Benchmark:isAndroid() and not Benchmark.open then
         local viewport = Config.viewport
-        love.graphics.push("all")
         love.graphics.setColor(0.12, 0.19, 0.29, 0.9)
         love.graphics.rectangle("fill", viewport.width - 112, viewport.height - 54, 100, 44, 7, 7)
         love.graphics.setColor(0.45, 0.72, 1, 1)
         love.graphics.rectangle("line", viewport.width - 112, viewport.height - 54, 100, 44, 7, 7)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.printf("TEST", viewport.width - 108, viewport.height - 40, 92, "center")
-        love.graphics.pop()
     end
+    love.graphics.pop()
+
+    -- F7 arrows and trails follow the world; its statistics panel stays fixed.
+    love.graphics.push("all")
+    Viewport:apply()
+    Camera:apply()
+    VectorLab:drawWorld()
+    love.graphics.pop()
 end
