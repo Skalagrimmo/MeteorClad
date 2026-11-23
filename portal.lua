@@ -2,6 +2,8 @@
 -- Rare, unstable portals hidden in the mist. Touching one sends the player
 -- to a distant, randomly selected point with a short landing grace period.
 
+local Style = require("visual_style")
+
 local Portals = {
     elapsed = 0,
     seed = 1,
@@ -295,13 +297,14 @@ function Portals:draw()
         local progress = 1 - effect.life / effect.duration
         local radius = 14 + progress * (effect.arrival and 62 or 48)
         local alpha = (1 - progress) * (effect.arrival and 0.58 or 0.42)
-        if effect.arrival then
-            love.graphics.setColor(0.28, 0.82, 1, alpha)
-        else
-            love.graphics.setColor(0.72, 0.34, 1, alpha)
-        end
+        local color = effect.arrival and Style.portal.arrival or Style.portal.departure
+
+        love.graphics.setColor(color[1], color[2], color[3], alpha)
         love.graphics.circle("line", effect.x, effect.y, radius)
-        love.graphics.setColor(0.38, 0.68, 1, alpha * 0.55)
+        love.graphics.setColor(
+            Style.portal.inner[1], Style.portal.inner[2],
+            Style.portal.inner[3], alpha * 0.55
+        )
         love.graphics.circle("line", effect.x, effect.y, radius * 0.68)
     end
 
@@ -314,14 +317,22 @@ function Portals:draw()
         local radius = portal.radius * (0.88 + opening * 0.12) * pulse
         local alpha = opening * fade
 
-        -- A narrow dark tear sits inside two broken, rotating rings.
-        love.graphics.setColor(0.25, 0.04, 0.42, 0.20 * alpha)
+        love.graphics.setColor(
+            Style.portal.haze[1], Style.portal.haze[2],
+            Style.portal.haze[3], 0.20 * alpha
+        )
         love.graphics.ellipse("fill", portal.x, portal.y, radius * 1.45, radius * 1.8)
-        love.graphics.setColor(0.008, 0.012, 0.028, 0.92 * alpha)
+        love.graphics.setColor(
+            Style.portal.void[1], Style.portal.void[2],
+            Style.portal.void[3], 0.92 * alpha
+        )
         love.graphics.ellipse("fill", portal.x, portal.y, radius * 0.58, radius * 1.02)
 
         love.graphics.setLineWidth(2.1)
-        love.graphics.setColor(0.55, 0.30, 0.96, 0.82 * alpha)
+        love.graphics.setColor(
+            Style.portal.outer[1], Style.portal.outer[2],
+            Style.portal.outer[3], 0.82 * alpha
+        )
         drawArc(
             portal.x, portal.y, radius * 1.04,
             portal.rotation, math.pi * 0.76, 22
@@ -332,7 +343,10 @@ function Portals:draw()
         )
 
         love.graphics.setLineWidth(1.2)
-        love.graphics.setColor(0.28, 0.82, 1, 0.66 * alpha)
+        love.graphics.setColor(
+            Style.portal.inner[1], Style.portal.inner[2],
+            Style.portal.inner[3], 0.66 * alpha
+        )
         drawArc(
             portal.x, portal.y, radius * 0.83,
             -portal.rotation * 0.72 + portal.phase, math.pi * 0.92, 24
@@ -343,7 +357,6 @@ function Portals:draw()
             math.pi * 0.34, 10
         )
 
-        -- Two faint spirals make the opening look like a depth, not a ring marker.
         for strand = 1, 2 do
             local points = {}
             for i = 0, 24 do
@@ -354,14 +367,20 @@ function Portals:draw()
                 points[#points + 1] = portal.x + math.cos(angle) * spiralRadius
                 points[#points + 1] = portal.y + math.sin(angle) * spiralRadius * 1.55
             end
-            love.graphics.setColor(0.45, 0.70, 1, 0.28 * alpha)
+            love.graphics.setColor(
+                Style.portal.spiral[1], Style.portal.spiral[2],
+                Style.portal.spiral[3], 0.28 * alpha
+            )
             love.graphics.line(points)
         end
 
         for i = 1, 4 do
             local angle = portal.rotation * 1.4 + i * math.pi * 0.5
             local orbit = radius * 1.22
-            love.graphics.setColor(0.58, 0.78, 1, 0.72 * alpha)
+            love.graphics.setColor(
+                Style.portal.mote[1], Style.portal.mote[2],
+                Style.portal.mote[3], 0.72 * alpha
+            )
             love.graphics.circle(
                 "fill",
                 portal.x + math.cos(angle) * orbit,
@@ -370,11 +389,15 @@ function Portals:draw()
             )
         end
 
-        love.graphics.setColor(0.76, 0.62, 1, 0.48 * (1 - opening))
+        love.graphics.setColor(
+            Style.portal.rim[1], Style.portal.rim[2],
+            Style.portal.rim[3], 0.48 * (1 - opening)
+        )
         love.graphics.circle("line", portal.x, portal.y, radius * (0.72 + opening * 0.5))
     end
 
     love.graphics.pop()
 end
+
 
 return Portals
