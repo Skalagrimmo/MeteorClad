@@ -15,6 +15,7 @@ local VectorLab = require("vector_lab")
 local CircleBatch = require("circle_batch")
 local Camera = require("camera")
 local Viewport = require("viewport")
+local Fog = require("fog")
 
 local ctx = {
     config = Config,
@@ -30,7 +31,8 @@ local ctx = {
     benchmark = Benchmark,
     vectorLab = VectorLab,
     camera = Camera,
-    viewport = Viewport
+    viewport = Viewport,
+    fog = Fog
 }
 
 Loot:bind(ctx)
@@ -43,6 +45,7 @@ Benchmark:bind(ctx)
 VectorLab:bind(ctx)
 Camera:bind(ctx)
 Viewport:bind(ctx)
+Fog:bind(ctx)
 
 local function loadInterfaceFont()
     local fontPath = "fonts/NotoSans-Regular.ttf"
@@ -80,6 +83,7 @@ function love.load()
     CircleBatch:init()
     loadInterfaceFont()
     math.randomseed(os.time())
+    Fog:init()
     Game:reset()
 end
 
@@ -90,12 +94,18 @@ function love.update(dt)
         -- The controlled radial test is stationary; pause the game simulation.
         return
     else
+        Fog:update(dt)
         Game:update(dt)
         Camera:update(dt)
     end
 end
 
 function love.keypressed(key)
+    if key == "f9" then
+        Fog:toggle()
+        return
+    end
+
     -- F6 always closes VectorLab modes before opening the benchmark panel.
     if key == "f6" then
         if VectorLab.radialOpen then
@@ -173,6 +183,7 @@ function love.draw()
     love.graphics.push("all")
     Viewport:apply()
     Camera:apply()
+    drawProfiled("fog_draw_cpu", Fog, profiling)
     drawProfiled("loot_draw_cpu", Loot, profiling)
     drawProfiled("player_draw_cpu", Player, profiling)
     drawProfiled("enemies_draw_cpu", Enemies, profiling)
