@@ -42,17 +42,17 @@ function Enemies:spawn(typeName, x, y, waveScale)
 end
 
 function Enemies:spawnWave(waveNum)
-    local arena = ctx.config.arena
+    local arena = ctx.config.world
     local count = 4 + waveNum * 2
     local waveScale = 1 + (waveNum - 1) * 0.15
 
     for i = 1, count do
         local side = math.random(1, 4)
         local x, y
-        if side == 1 then x, y = math.random(0, arena.width), -25
-        elseif side == 2 then x, y = math.random(0, arena.width), arena.height + 25
-        elseif side == 3 then x, y = -25, math.random(0, arena.height)
-        else x, y = arena.width + 25, math.random(0, arena.height) end
+        if side == 1 then x, y = math.random(0, world.width), -25
+        elseif side == 2 then x, y = math.random(0, world.width), world.height + 25
+        elseif side == 3 then x, y = -25, math.random(0, world.height)
+        else x, y = world.width + 25, math.random(0, world.height) end
 
         local roll = math.random(1, 100)
         local chosenType = "grunt"
