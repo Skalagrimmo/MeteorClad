@@ -177,6 +177,7 @@ function love.draw()
     drawProfiled("player_draw_cpu", Player, profiling)
     drawProfiled("enemies_draw_cpu", Enemies, profiling)
     drawProfiled("projectiles_draw_cpu", Projectiles, profiling)
+    VectorLab:drawWorld()
     love.graphics.pop()
 
     -- HUD and diagnostics use the same logical viewport, but not the camera.
@@ -200,12 +201,5 @@ function love.draw()
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.printf("TEST", viewport.width - 108, viewport.height - 40, 92, "center")
     end
-    love.graphics.pop()
-
-    -- F7 arrows and trails follow the world; its statistics panel stays fixed.
-    love.graphics.push("all")
-    Viewport:apply()
-    Camera:apply()
-    VectorLab:drawWorld()
     love.graphics.pop()
 end
