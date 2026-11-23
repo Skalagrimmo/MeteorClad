@@ -22,8 +22,8 @@ return {
     -- Ambient atmosphere is a world-space layer behind all gameplay entities.
     ambientFog = {
         enabled = true,
-        patchCount = 28,
-        moteCount = 26,
+        patchCount = 30,
+        moteCount = 24,
         opacity = 1.0,
         moteOpacity = 0.75
     },
