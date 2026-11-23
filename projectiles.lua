@@ -1,4 +1,6 @@
 -- projectiles.lua
+local Style = require("visual_style")
+
 local Projectiles = {
     list = {}
 }
@@ -84,20 +86,47 @@ function Projectiles:update(dt)
     end
 end
 
-function Projectiles:draw()
-    for _, p in ipairs(self.list) do
-        if p.owner == "enemy" then
-            love.graphics.setColor(0.95, 0.3, 1.0)
-            love.graphics.circle("fill", p.x, p.y, p.radius)
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("fill", p.x, p.y, p.radius * 0.4)
-        else
-            love.graphics.setColor(0.2, 0.9, 1.0)
-            love.graphics.circle("fill", p.x, p.y, p.radius)
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.circle("fill", p.x, p.y, p.radius * 0.5)
-        end
-    end
+local function setStyleColor(color, alpha)
+    love.graphics.setColor(color[1], color[2], color[3], alpha or 1)
 end
+
+function Projectiles:draw()
+    love.graphics.push("all")
+    for _, projectile in ipairs(self.list) do
+        local palette = projectile.owner == "player"
+            and Style.projectile.player
+            or Style.projectile.enemy
+        local angle = math.atan2(projectile.vy, projectile.vx)
+        local r = projectile.radius
+
+        love.graphics.push()
+        love.graphics.translate(projectile.x, projectile.y)
+        love.graphics.rotate(angle)
+
+        setStyleColor(palette.glow, 0.22)
+        love.graphics.circle("fill", 0, 0, r * 1.75)
+
+        setStyleColor(palette.body, 1)
+        love.graphics.polygon("fill",
+            r * 1.42, 0, 0, -r * 0.68,
+            -r * 1.02, 0, 0, r * 0.68
+        )
+        setStyleColor(palette.edge, 0.96)
+        love.graphics.setLineWidth(1.2)
+        love.graphics.polygon("line",
+            r * 1.42, 0, 0, -r * 0.68,
+            -r * 1.02, 0, 0, r * 0.68
+        )
+
+        setStyleColor(palette.trail, 0.76)
+        love.graphics.line(-r * 0.62, 0, -r * 1.48, 0)
+        setStyleColor(palette.core, 1)
+        love.graphics.circle("fill", r * 0.18, 0, math.max(1.4, r * 0.28))
+
+        love.graphics.pop()
+    end
+    love.graphics.pop()
+end
+
 
 return Projectiles

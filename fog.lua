@@ -2,6 +2,8 @@
 -- Procedural, world-space mist for the expanded dark arena.
 -- Textures are generated once; a lightweight shader animates their internal flow when supported.
 
+local Style = require("visual_style")
+
 local Fog = {
     enabled = true,
     elapsed = 0,
@@ -249,9 +251,9 @@ function Fog:init()
             pulseSpeed = 0.12 + self:nextRandom() * 0.18,
             opacity = opacity,
             color = {
-                0.39 + variation * 0.07,
-                0.46 + variation * 0.08,
-                0.54 + variation * 0.09
+                Style.fog.base[1] + variation * Style.fog.variation[1],
+                Style.fog.base[2] + variation * Style.fog.variation[2],
+                Style.fog.base[3] + variation * Style.fog.variation[3]
             }
         }
     end
@@ -372,7 +374,7 @@ function Fog:draw()
     -- Small dim motes suggest dust suspended in the mist, not a star field.
     for _, mote in ipairs(self.motes) do
         local shimmer = 0.78 + 0.22 * math.sin(self.elapsed * 0.7 + mote.phase)
-        love.graphics.setColor(0.52, 0.59, 0.65, mote.alpha * moteOpacity * shimmer)
+        love.graphics.setColor(Style.fog.mote[1], Style.fog.mote[2], Style.fog.mote[3], mote.alpha * moteOpacity * shimmer)
         love.graphics.circle("fill", mote.x, mote.y, mote.radius)
     end
 
