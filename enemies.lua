@@ -103,7 +103,6 @@ end
 
 function Enemies:update(dt)
     local Player = ctx.player
-    local Utils = ctx.utils
 
     for i = #self.list, 1, -1 do
         local e = self.list[i]
@@ -113,21 +112,28 @@ function Enemies:update(dt)
         else
             if e.hitFlash > 0 then e.hitFlash = e.hitFlash - dt end
 
-            local angle = math.atan2(Player.y - e.y, Player.x - e.x)
-            local d = Utils.dist(e.x, e.y, Player.x, Player.y)
+            local dx = Player.x - e.x
+            local dy = Player.y - e.y
+            local angle = math.atan2(dy, dx)
+            local distanceSquared = dx * dx + dy * dy
 
             if e.behavior == "melee" then
-                if d > Player.radius + e.radius - 4 then
+                local stopDistance = Player.radius + e.radius - 4
+                if stopDistance < 0 or distanceSquared > stopDistance * stopDistance then
                     e.x = e.x + math.cos(angle) * e.speed * dt
                     e.y = e.y + math.sin(angle) * e.speed * dt
                 end
             elseif e.behavior == "ranged" then
-                if d > e.preferredDist then
+                local preferredDistance = e.preferredDist
+                if preferredDistance < 0 or distanceSquared > preferredDistance * preferredDistance then
                     e.x = e.x + math.cos(angle) * e.speed * dt
                     e.y = e.y + math.sin(angle) * e.speed * dt
-                elseif d < e.preferredDist - 60 then
-                    e.x = e.x - math.cos(angle) * (e.speed * 0.7) * dt
-                    e.y = e.y - math.sin(angle) * (e.speed * 0.7) * dt
+                else
+                    local retreatDistance = preferredDistance - 60
+                    if retreatDistance > 0 and distanceSquared < retreatDistance * retreatDistance then
+                        e.x = e.x - math.cos(angle) * (e.speed * 0.7) * dt
+                        e.y = e.y - math.sin(angle) * (e.speed * 0.7) * dt
+                    end
                 end
 
                 e.shootTimer = e.shootTimer - dt
@@ -137,7 +143,8 @@ function Enemies:update(dt)
                 end
             end
 
-            if d <= Player.radius + e.radius then
+            local contactDistance = Player.radius + e.radius
+            if contactDistance >= 0 and distanceSquared <= contactDistance * contactDistance then
                 Player:takeDamage(e.damage)
             end
 
