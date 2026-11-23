@@ -8,7 +8,7 @@ function Player:bind(gameCtx)
 end
 
 function Player:init()
-    local arena = ctx.config.world
+    local world = ctx.config.world
     self.x = world.width / 2
     self.y = world.height / 2
     self.radius = 18
@@ -124,7 +124,7 @@ function Player:whirlwind()
 end
 
 function Player:update(dt)
-    local arena = ctx.config.world
+    local world = ctx.config.world
     local Utils = ctx.utils
 
     if self.invulnTimer > 0 then self.invulnTimer = math.max(0, self.invulnTimer - dt) end
