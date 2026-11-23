@@ -14,6 +14,33 @@ local function setStyleColor(color, alpha)
     love.graphics.setColor(color[1], color[2], color[3], alpha or 1)
 end
 
+local function drawEnginePods(radius, palette, alpha)
+    local r = radius
+    for side = -1, 1, 2 do
+        local sy = side * r * 0.43
+        setStyleColor(palette.hull, alpha)
+        love.graphics.polygon("fill",
+            -r * 0.78, sy - r * 0.18,
+            -r * 0.20, sy - r * 0.20,
+            r * 0.04, sy,
+            -r * 0.20, sy + r * 0.20,
+            -r * 0.78, sy + r * 0.18
+        )
+        setStyleColor(palette.edge, alpha * 0.92)
+        love.graphics.polygon("line",
+            -r * 0.78, sy - r * 0.18,
+            -r * 0.20, sy - r * 0.20,
+            r * 0.04, sy,
+            -r * 0.20, sy + r * 0.20,
+            -r * 0.78, sy + r * 0.18
+        )
+        setStyleColor(palette.engine, alpha)
+        love.graphics.circle("fill", -r * 0.66, sy, r * 0.10)
+        setStyleColor(palette.core, alpha * 0.96)
+        love.graphics.circle("fill", -r * 0.68, sy, r * 0.045)
+    end
+end
+
 local function drawEnemyGlyph(enemy)
     local palette = Style.enemy[enemy.type] or Style.enemy.grunt
     local r = enemy.radius
@@ -24,64 +51,167 @@ local function drawEnemyGlyph(enemy)
     love.graphics.rotate(angle)
     love.graphics.setLineWidth(math.max(1, r * 0.075))
 
-    setStyleColor(palette.edge, enemy.hitFlash > 0 and 0.95 or 0.88)
-    love.graphics.circle("line", 0, 0, r * 0.84)
+    drawEnginePods(r, palette, 1)
 
     if enemy.type == "grunt" then
-        -- A broad, jagged mask with two forward-facing sensory cuts.
-        love.graphics.polygon("line",
-            r * 0.83, 0, r * 0.20, -r * 0.56,
-            -r * 0.52, -r * 0.48, -r * 0.70, 0,
-            -r * 0.52, r * 0.48, r * 0.20, r * 0.56
+        -- Scout drone: compact fuselage, swept sensor wings, and a short nose probe.
+        setStyleColor(palette.hull, 1)
+        love.graphics.polygon("fill",
+            r * 0.92, 0,
+            r * 0.18, -r * 0.34,
+            -r * 0.58, -r * 0.27,
+            -r * 0.78, 0,
+            -r * 0.58, r * 0.27,
+            r * 0.18, r * 0.34
         )
-        setStyleColor(palette.accent, 0.95)
-        love.graphics.line(-r * 0.34, -r * 0.22, r * 0.30, -r * 0.22)
-        love.graphics.line(-r * 0.34, r * 0.22, r * 0.30, r * 0.22)
+        setStyleColor(palette.edge, 0.96)
+        love.graphics.polygon("line",
+            r * 0.92, 0,
+            r * 0.18, -r * 0.34,
+            -r * 0.58, -r * 0.27,
+            -r * 0.78, 0,
+            -r * 0.58, r * 0.27,
+            r * 0.18, r * 0.34
+        )
+        for side = -1, 1, 2 do
+            local sy = side * r * 0.28
+            setStyleColor(palette.plate, 1)
+            love.graphics.polygon("fill",
+                -r * 0.28, sy,
+                -r * 0.12, sy * 1.85,
+                r * 0.48, sy * 1.22,
+                r * 0.26, sy * 0.72
+            )
+            setStyleColor(palette.edge, 0.88)
+            love.graphics.line(
+                -r * 0.28, sy,
+                -r * 0.12, sy * 1.85,
+                r * 0.48, sy * 1.22
+            )
+        end
+        setStyleColor(palette.weapon, 1)
+        love.graphics.line(r * 0.56, 0, r * 1.08, 0)
         setStyleColor(palette.core, 1)
-        love.graphics.circle("fill", r * 0.18, 0, math.max(1.6, r * 0.13))
+        love.graphics.circle("fill", r * 0.33, 0, r * 0.12)
 
     elseif enemy.type == "rusher" then
-        -- A narrow directional blade communicates its higher movement speed.
-        love.graphics.polygon("line",
-            r * 0.96, 0, r * 0.16, -r * 0.50,
-            -r * 0.24, -r * 0.20, -r * 0.62, -r * 0.33,
-            -r * 0.39, 0, -r * 0.62, r * 0.33,
-            -r * 0.24, r * 0.20, r * 0.16, r * 0.50
+        -- Interceptor: long delta wing, narrow nose, and visible twin engines.
+        setStyleColor(palette.hull, 1)
+        love.graphics.polygon("fill",
+            r * 1.22, 0,
+            r * 0.10, -r * 0.19,
+            -r * 0.88, -r * 0.88,
+            -r * 0.55, 0,
+            -r * 0.88, r * 0.88,
+            r * 0.10, r * 0.19
         )
-        setStyleColor(palette.accent, 0.96)
-        love.graphics.line(-r * 0.44, -r * 0.12, r * 0.55, 0)
-        love.graphics.line(-r * 0.44, r * 0.12, r * 0.55, 0)
+        setStyleColor(palette.edge, 1)
+        love.graphics.polygon("line",
+            r * 1.22, 0,
+            r * 0.10, -r * 0.19,
+            -r * 0.88, -r * 0.88,
+            -r * 0.55, 0,
+            -r * 0.88, r * 0.88,
+            r * 0.10, r * 0.19
+        )
+        setStyleColor(palette.plate, 1)
+        love.graphics.polygon("fill",
+            r * 0.72, 0,
+            -r * 0.38, -r * 0.13,
+            -r * 0.62, 0,
+            -r * 0.38, r * 0.13
+        )
+        setStyleColor(palette.weapon, 1)
+        love.graphics.line(r * 0.24, -r * 0.12, r * 1.02, 0, r * 0.24, r * 0.12)
         setStyleColor(palette.core, 1)
-        love.graphics.circle("fill", r * 0.36, 0, math.max(1.3, r * 0.10))
+        love.graphics.circle("fill", -r * 0.48, -r * 0.43, r * 0.08)
+        love.graphics.circle("fill", -r * 0.48, r * 0.43, r * 0.08)
 
     elseif enemy.type == "tank" then
-        -- Layered octagonal armor and four heavy radial seams.
-        love.graphics.polygon("line",
-            r * 0.58, -r * 0.48, -r * 0.12, -r * 0.74,
-            -r * 0.62, -r * 0.43, -r * 0.76, r * 0.12,
-            -r * 0.42, r * 0.66, r * 0.20, r * 0.72,
-            r * 0.70, r * 0.36, r * 0.82, -r * 0.12
-        )
-        setStyleColor(palette.accent, 0.95)
-        love.graphics.circle("line", 0, 0, r * 0.46)
-        love.graphics.line(-r * 0.58, 0, r * 0.58, 0)
-        love.graphics.line(0, -r * 0.58, 0, r * 0.58)
-        setStyleColor(palette.core, 1)
+        -- Heavy gunship: broad armored wings, side hardpoints, and paired cannons.
+        setStyleColor(palette.hull, 1)
         love.graphics.polygon("fill",
-            r * 0.22, 0, 0, -r * 0.20, -r * 0.22, 0, 0, r * 0.20
+            r * 0.86, 0,
+            r * 0.32, -r * 0.40,
+            -r * 0.38, -r * 0.78,
+            -r * 0.88, -r * 0.62,
+            -r * 0.68, 0,
+            -r * 0.88, r * 0.62,
+            -r * 0.38, r * 0.78,
+            r * 0.32, r * 0.40
         )
+        setStyleColor(palette.edge, 0.98)
+        love.graphics.polygon("line",
+            r * 0.86, 0,
+            r * 0.32, -r * 0.40,
+            -r * 0.38, -r * 0.78,
+            -r * 0.88, -r * 0.62,
+            -r * 0.68, 0,
+            -r * 0.88, r * 0.62,
+            -r * 0.38, r * 0.78,
+            r * 0.32, r * 0.40
+        )
+        for side = -1, 1, 2 do
+            local sy = side * r * 0.51
+            setStyleColor(palette.plate, 1)
+            love.graphics.rectangle("fill", -r * 0.42, sy - r * 0.17, r * 0.62, r * 0.34, r * 0.06, r * 0.06)
+            setStyleColor(palette.edge, 0.94)
+            love.graphics.rectangle("line", -r * 0.42, sy - r * 0.17, r * 0.62, r * 0.34, r * 0.06, r * 0.06)
+            setStyleColor(palette.weapon, 1)
+            love.graphics.line(r * 0.04, sy, r * 0.90, sy)
+            love.graphics.circle("fill", r * 0.90, sy, r * 0.11)
+        end
+        setStyleColor(palette.accent, 1)
+        love.graphics.polygon("fill",
+            r * 0.47, 0,
+            0, -r * 0.27,
+            -r * 0.40, 0,
+            0, r * 0.27
+        )
+        setStyleColor(palette.core, 1)
+        love.graphics.circle("fill", r * 0.03, 0, r * 0.17)
 
     elseif enemy.type == "shooter" then
-        -- A floating reticle and eye distinguish the ranged archetype.
-        love.graphics.polygon("line",
-            r * 0.78, 0, 0, -r * 0.72, -r * 0.78, 0, 0, r * 0.72
+        -- Artillery skimmer: sensor dish, wing-mounted launch rails, and dual barrels.
+        setStyleColor(palette.hull, 1)
+        love.graphics.polygon("fill",
+            r * 0.72, 0,
+            r * 0.26, -r * 0.44,
+            -r * 0.50, -r * 0.48,
+            -r * 0.82, 0,
+            -r * 0.50, r * 0.48,
+            r * 0.26, r * 0.44
         )
-        setStyleColor(palette.accent, 0.96)
-        love.graphics.circle("line", 0, 0, r * 0.43)
-        love.graphics.line(-r * 0.62, 0, r * 0.62, 0)
-        love.graphics.line(0, -r * 0.62, 0, r * 0.62)
+        setStyleColor(palette.edge, 1)
+        love.graphics.polygon("line",
+            r * 0.72, 0,
+            r * 0.26, -r * 0.44,
+            -r * 0.50, -r * 0.48,
+            -r * 0.82, 0,
+            -r * 0.50, r * 0.48,
+            r * 0.26, r * 0.44
+        )
+        for side = -1, 1, 2 do
+            local sy = side * r * 0.60
+            setStyleColor(palette.plate, 1)
+            love.graphics.polygon("fill",
+                -r * 0.42, sy - r * 0.11,
+                r * 0.12, sy - r * 0.11,
+                r * 0.40, sy,
+                r * 0.12, sy + r * 0.11,
+                -r * 0.42, sy + r * 0.11
+            )
+            setStyleColor(palette.weapon, 1)
+            love.graphics.line(-r * 0.12, sy, r * 0.48, sy)
+        end
+        setStyleColor(palette.accent, 1)
+        love.graphics.circle("line", -r * 0.02, 0, r * 0.34)
+        love.graphics.circle("line", -r * 0.02, 0, r * 0.19)
         setStyleColor(palette.core, 1)
-        love.graphics.circle("fill", r * 0.08, 0, math.max(1.6, r * 0.14))
+        love.graphics.circle("fill", r * 0.04, 0, r * 0.12)
+        setStyleColor(palette.weapon, 1)
+        love.graphics.line(r * 0.32, -r * 0.12, r * 0.82, -r * 0.12)
+        love.graphics.line(r * 0.32, r * 0.12, r * 0.82, r * 0.12)
     end
 
     love.graphics.pop()
