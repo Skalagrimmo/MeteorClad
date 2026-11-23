@@ -338,7 +338,7 @@ function Fog:draw()
     for _, patch in ipairs(self.patches) do
         if flowShader then
             flowShader:send("u_phase", patch.phase)
-            flowShader:send("u_flow", patch.flowX, patch.flowY)
+            flowShader:send("u_flow", {patch.flowX, patch.flowY})
             flowShader:send("u_warp", patch.warp)
         end
 
