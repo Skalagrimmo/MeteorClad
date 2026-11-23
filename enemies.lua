@@ -114,32 +114,54 @@ function Enemies:update(dt)
 
             local dx = Player.x - e.x
             local dy = Player.y - e.y
-            local angle = math.atan2(dy, dx)
             local distanceSquared = dx * dx + dy * dy
+            local movementSpeed = 0
 
             if e.behavior == "melee" then
                 local stopDistance = Player.radius + e.radius - 4
                 if stopDistance < 0 or distanceSquared > stopDistance * stopDistance then
-                    e.x = e.x + math.cos(angle) * e.speed * dt
-                    e.y = e.y + math.sin(angle) * e.speed * dt
+                    movementSpeed = e.speed
                 end
             elseif e.behavior == "ranged" then
                 local preferredDistance = e.preferredDist
                 if preferredDistance < 0 or distanceSquared > preferredDistance * preferredDistance then
-                    e.x = e.x + math.cos(angle) * e.speed * dt
-                    e.y = e.y + math.sin(angle) * e.speed * dt
+                    movementSpeed = e.speed
                 else
                     local retreatDistance = preferredDistance - 60
                     if retreatDistance > 0 and distanceSquared < retreatDistance * retreatDistance then
-                        e.x = e.x - math.cos(angle) * (e.speed * 0.7) * dt
-                        e.y = e.y - math.sin(angle) * (e.speed * 0.7) * dt
+                        movementSpeed = -e.speed * 0.7
                     end
                 end
+            end
 
+            if movementSpeed ~= 0 then
+                local directionX
+                local directionY
+
+                if distanceSquared > 0 then
+                    local inverseDistance = 1 / math.sqrt(distanceSquared)
+                    directionX = dx * inverseDistance
+                    directionY = dy * inverseDistance
+                else
+                    -- Match the previous atan2(0, 0) + cos/sin fallback exactly.
+                    local fallbackAngle = math.atan2(dy, dx)
+                    directionX = math.cos(fallbackAngle)
+                    directionY = math.sin(fallbackAngle)
+                end
+
+                e.x = e.x + directionX * movementSpeed * dt
+                e.y = e.y + directionY * movementSpeed * dt
+            end
+
+            -- Preserve the original update order: move first, then spawn the
+            -- projectile at the shooter's updated position.
+            if e.behavior == "ranged" then
                 e.shootTimer = e.shootTimer - dt
                 if e.shootTimer <= 0 then
                     e.shootTimer = e.shootCooldown
-                    ctx.projectiles:spawn(e.x, e.y, angle, 240, e.damage, "enemy")
+                    -- dx/dy still describe the pre-movement aim direction.
+                    local shootAngle = math.atan2(dy, dx)
+                    ctx.projectiles:spawn(e.x, e.y, shootAngle, 240, e.damage, "enemy")
                 end
             end
 
