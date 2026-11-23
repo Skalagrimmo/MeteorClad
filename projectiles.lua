@@ -53,7 +53,7 @@ function Projectiles:update(dt)
     local Utils = ctx.utils
     local Player = ctx.player
     local Enemies = ctx.enemies
-    local arena = ctx.config.world
+    local world = ctx.config.world
 
     for i = #self.list, 1, -1 do
         local p = self.list[i]
