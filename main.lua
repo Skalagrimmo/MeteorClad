@@ -185,11 +185,11 @@ function love.draw()
     drawProfiled("ui_draw_cpu", UI, profiling)
     drawProfiled("benchmark_draw_cpu", Benchmark, profiling)
 
+    VectorLab:draw()
+
     if profiling then
         Benchmark:recordProfile("draw_total_cpu", love.timer.getTime() - startedAt)
     end
-
-    VectorLab:draw()
 
     if Benchmark:isAndroid() and not Benchmark.open then
         local viewport = Config.viewport
