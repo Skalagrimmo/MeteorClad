@@ -18,12 +18,9 @@ function Viewport:bind(gameCtx)
     self.height = ctx.config.viewport.height
 end
 
-function Viewport:update(callbackWidth, callbackHeight)
-    -- love.resize supplies the new DPI-scaled dimensions in LÖVE 11.x.
-    local windowWidth, windowHeight = callbackWidth, callbackHeight
-    if not windowWidth or not windowHeight or windowWidth <= 0 or windowHeight <= 0 then
-        windowWidth, windowHeight = love.graphics.getDimensions()
-    end
+function Viewport:update(_callbackWidth, _callbackHeight)
+    -- Use the exact drawing coordinate space; pointer events use pixel coordinates too.
+    local windowWidth, windowHeight = love.graphics.getDimensions()
     if windowWidth <= 0 or windowHeight <= 0 then
         windowWidth = self.width
         windowHeight = self.height
