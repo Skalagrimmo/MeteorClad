@@ -1,4 +1,6 @@
 -- loot.lua
+local Style = require("visual_style")
+
 local Loot = {
     orbs = {}
 }
@@ -20,7 +22,9 @@ function Loot:spawnXP(x, y, value)
         x = x,
         y = y,
         value = value,
-        radius = value >= 30 and 7 or 5
+        radius = value >= 30 and 7 or 5,
+        age = 0,
+        phase = (x * 0.017 + y * 0.013 + value * 0.19) % (math.pi * 2)
     })
 end
 
@@ -30,6 +34,7 @@ function Loot:update(dt)
 
     for i = #self.orbs, 1, -1 do
         local orb = self.orbs[i]
+        orb.age = orb.age + dt
         local d = Utils.dist(Player.x, Player.y, orb.x, orb.y)
 
         if d <= Player.pickupRadius then
@@ -58,7 +63,9 @@ function Loot:draw()
     end
 
     CircleBatch:prepare(self.drawBatch)
-    self.drawBatch:setColor(0.2, 1, 0.5, 1)
+    self.drawBatch:setColor(
+        Style.loot.glow[1], Style.loot.glow[2], Style.loot.glow[3], 0.92
+    )
 
     local scaleFactor = 2 / CircleBatch.size
     local origin = CircleBatch.origin
@@ -68,6 +75,37 @@ function Loot:draw()
     end
 
     CircleBatch:draw(self.drawBatch)
+
+    love.graphics.push("all")
+    love.graphics.setLineWidth(1.25)
+    for _, orb in ipairs(self.orbs) do
+        local pulse = 0.82 + 0.18 * math.sin(orb.age * 3.2 + orb.phase)
+        love.graphics.push()
+        love.graphics.translate(orb.x, orb.y)
+        love.graphics.rotate(orb.phase + orb.age * 0.72)
+
+        love.graphics.setColor(
+            Style.loot.edge[1], Style.loot.edge[2], Style.loot.edge[3], 0.94 * pulse
+        )
+        love.graphics.polygon("line",
+            0, -orb.radius * 1.55,
+            orb.radius * 0.78, 0,
+            0, orb.radius * 1.55,
+            -orb.radius * 0.78, 0
+        )
+        love.graphics.setColor(
+            Style.loot.core[1], Style.loot.core[2], Style.loot.core[3], 0.96 * pulse
+        )
+        love.graphics.polygon("fill",
+            0, -orb.radius * 0.84,
+            orb.radius * 0.38, 0,
+            0, orb.radius * 0.84,
+            -orb.radius * 0.38, 0
+        )
+        love.graphics.pop()
+    end
+    love.graphics.pop()
 end
+
 
 return Loot
