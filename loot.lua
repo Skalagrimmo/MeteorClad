@@ -57,6 +57,7 @@ end
 
 function Loot:draw()
     if #self.orbs == 0 then return end
+    love.graphics.push("all")
 
     if not self.drawBatch then
         self.drawBatch = CircleBatch:newBatch(math.max(CircleBatch.initialCapacity, #self.orbs))
@@ -104,6 +105,7 @@ function Loot:draw()
         )
         love.graphics.pop()
     end
+    love.graphics.pop()
     love.graphics.pop()
 end
 
