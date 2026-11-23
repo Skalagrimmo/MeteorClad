@@ -18,9 +18,12 @@ function Viewport:bind(gameCtx)
     self.height = ctx.config.viewport.height
 end
 
-function Viewport:update(_callbackWidth, _callbackHeight)
-    -- getDimensions returns the current DPI-scaled drawing size in LÖVE 11.x.
-    local windowWidth, windowHeight = love.graphics.getDimensions()
+function Viewport:update(callbackWidth, callbackHeight)
+    -- love.resize supplies the new DPI-scaled dimensions in LÖVE 11.x.
+    local windowWidth, windowHeight = callbackWidth, callbackHeight
+    if not windowWidth or not windowHeight or windowWidth <= 0 or windowHeight <= 0 then
+        windowWidth, windowHeight = love.graphics.getDimensions()
+    end
     if windowWidth <= 0 or windowHeight <= 0 then
         windowWidth = self.width
         windowHeight = self.height
@@ -37,18 +40,17 @@ function Viewport:update(_callbackWidth, _callbackHeight)
         self.scale = 1
     end
 
-    self.offsetX = (windowWidth - self.width * self.scale) * 0.5
-    self.offsetY = (windowHeight - self.height * self.scale) * 0.5
+    self.offsetX = math.floor((windowWidth - self.width * self.scale) * 0.5 + 0.5)
+    self.offsetY = math.floor((windowHeight - self.height * self.scale) * 0.5 + 0.5)
 end
 
 function Viewport:apply()
     -- Scissor coordinates are in window space, so set them before transforms.
-    love.graphics.setScissor(
-        self.offsetX,
-        self.offsetY,
-        self.width * self.scale,
-        self.height * self.scale
-    )
+    local left = math.floor(self.offsetX)
+    local top = math.floor(self.offsetY)
+    local right = math.ceil(self.offsetX + self.width * self.scale)
+    local bottom = math.ceil(self.offsetY + self.height * self.scale)
+    love.graphics.setScissor(left, top, right - left, bottom - top)
     love.graphics.translate(self.offsetX, self.offsetY)
     love.graphics.scale(self.scale, self.scale)
 end
